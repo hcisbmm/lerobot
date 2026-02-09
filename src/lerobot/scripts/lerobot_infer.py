@@ -359,7 +359,7 @@ def _handle_mode_transition(
         return
 
     try:
-        # Entering TELEOP mode - disable torque so user can move freely and reset policy state
+        # Entering TELEOP mode - set zero gains so user can move freely
         if current_mode == ControlMode.TELEOP and previous_mode != ControlMode.TELEOP:
             if isinstance(teleop, list):
                 if teleop_arm is not None and hasattr(teleop_arm, "bus"):
@@ -369,6 +369,9 @@ def _handle_mode_transition(
                 if hasattr(teleop, "bus"):
                     teleop.bus.disable_torque()
                     logging.info("Teleoperator torque disabled for manual control")
+                # For i2rt-based teleoperators, set zero gains for free movement
+                elif hasattr(teleop, "set_teleop_mode"):
+                    teleop.set_teleop_mode(enabled=True)
 
             # Reset policy state so it starts fresh from the new position
             if policy is not None:
@@ -381,16 +384,36 @@ def _handle_mode_transition(
                 temporal_ensembler.reset()
             logging.info("Policy state reset for teleoperation - will start fresh from new position")
 
-        # Leaving TELEOP mode - enable torque for syncing
-        elif previous_mode == ControlMode.TELEOP and current_mode != ControlMode.TELEOP:
+        # Entering POLICY mode - set bilateral gains for position tracking
+        elif current_mode == ControlMode.POLICY and previous_mode != ControlMode.POLICY:
+            # Reset policy state to start fresh from current position
+            if policy is not None:
+                policy.reset()
+            if preprocessor is not None:
+                preprocessor.reset()
+            if postprocessor is not None:
+                postprocessor.reset()
+            if temporal_ensembler is not None:
+                temporal_ensembler.reset()
+
             if isinstance(teleop, list):
                 if teleop_arm is not None and hasattr(teleop_arm, "bus"):
                     teleop_arm.bus.enable_torque()
-                    logging.info("Teleoperator torque enabled for syncing")
+                    logging.info("Teleoperator torque enabled for policy tracking")
             else:
                 if hasattr(teleop, "bus"):
                     teleop.bus.enable_torque()
-                    logging.info("Teleoperator torque enabled for syncing")
+                    logging.info("Teleoperator torque enabled for policy tracking")
+                # For i2rt-based teleoperators, set bilateral gains for position tracking
+                elif hasattr(teleop, "set_teleop_mode"):
+                    # Get bilateral_kp from teleoperator config if available
+                    bilateral_kp = getattr(teleop, "bilateral_kp", 1.0)
+                    teleop.set_teleop_mode(enabled=False, bilateral_kp=bilateral_kp)
+
+        # Leaving TELEOP mode (but not entering POLICY - handled above)
+        elif previous_mode == ControlMode.TELEOP and current_mode == ControlMode.IDLE:
+            # Just going to IDLE, no special action needed
+            pass
 
     except Exception as e:
         logging.warning(f"Failed to handle mode transition: {e}")
@@ -539,9 +562,22 @@ def inference_loop(
             act_processed_smoothed = temporal_ensembler.update(act_processed)
             robot_action_to_send = robot_action_processor((act_processed_smoothed, obs))
 
-            # Sync teleoperator with robot position during policy control
-            # This allows smooth takeover when switching to teleoperation mode
-            if teleop is not None:
+            # Handle teleoperator feedback/syncing in policy mode
+            if teleop is not None and not isinstance(teleop, list):
+                # For teleoperators with feedback_features (e.g., i2rt-based), send feedback
+                # to make the leader arm actively follow the robot's action (where it's moving to)
+                if hasattr(teleop, "feedback_features") and len(teleop.feedback_features) > 0:
+                    try:
+                        # Send the robot action (where robot is moving), not observation
+                        teleop.send_feedback(robot_action_to_send)
+                    except (NotImplementedError, Exception) as e:
+                        logging.debug(f"Failed to send feedback to teleoperator: {e}")
+                # For Dynamixel-based teleoperators (no feedback_features),
+                # sync position for smooth takeover when switching to teleoperation mode
+                else:
+                    _sync_teleop_with_robot(teleop, obs, teleop_arm)
+            elif teleop is not None:
+                # Multi-teleop case (e.g., LeKiwi)
                 _sync_teleop_with_robot(teleop, obs, teleop_arm)
 
         elif state["control_mode"] == ControlMode.TELEOP and teleop is not None:
