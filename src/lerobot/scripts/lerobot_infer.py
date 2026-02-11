@@ -45,7 +45,6 @@ Keyboard Controls:
 import logging
 import shutil
 import time
-from collections import deque
 from dataclasses import asdict, dataclass
 from enum import Enum
 from pathlib import Path
@@ -108,6 +107,7 @@ from lerobot.utils.constants import OBS_STR
 from lerobot.utils.control_utils import is_headless, predict_action
 from lerobot.utils.import_utils import register_third_party_plugins
 from lerobot.utils.robot_utils import precise_sleep
+from lerobot.utils.temporal_ensemble import TemporalEnsembler
 from lerobot.utils.utils import get_safe_torch_device, init_logging, log_say
 from lerobot.utils.visualization_utils import init_rerun, log_rerun_data
 
@@ -118,101 +118,6 @@ class ControlMode(Enum):
     IDLE = "idle"
     POLICY = "policy"
     TELEOP = "teleop"
-
-
-class TemporalEnsembler:
-    """
-    Temporal ensembling for smooth action prediction.
-
-    This class maintains a buffer of recent actions and computes a weighted average
-    to reduce jitter and create smoother robot control.
-
-    Args:
-        k: Number of recent actions to keep in the buffer (window size)
-        exp: Exponential decay factor for weights:
-            - 1.0: uniform weights (simple moving average)
-            - <1.0: exponential decay (recent actions weighted more)
-    """
-
-    def __init__(self, k: int = 1, exp: float = 1.0):
-        if k < 1:
-            raise ValueError(f"k must be >= 1, got {k}")
-        if exp <= 0:
-            raise ValueError(f"exp must be > 0, got {exp}")
-
-        self.k = k
-        self.exp = exp
-        self.enabled = k > 1
-        self.action_buffer: deque = deque(maxlen=k)
-
-        # Precompute weights for efficiency
-        if self.enabled:
-            self._compute_weights()
-
-    def _compute_weights(self):
-        """Compute normalized exponential weights."""
-        # Generate weights: [exp^(k-1), exp^(k-2), ..., exp^1, exp^0]
-        # Most recent action has weight exp^0 = 1.0
-        weights = [self.exp**i for i in range(self.k - 1, -1, -1)]
-        total = sum(weights)
-        self.weights = [w / total for w in weights]
-
-    def reset(self):
-        """Clear the action buffer."""
-        self.action_buffer.clear()
-
-    def update(self, action: dict[str, Any]) -> dict[str, Any]:
-        """
-        Update buffer with new action and return smoothed action.
-
-        Args:
-            action: Dictionary of action values (e.g., motor positions)
-
-        Returns:
-            Smoothed action dictionary
-        """
-        if not self.enabled:
-            return action
-
-        # Add new action to buffer
-        self.action_buffer.append(action)
-
-        # If buffer not full yet, return the current action
-        if len(self.action_buffer) < self.k:
-            return action
-
-        # Compute weighted average
-        smoothed_action = {}
-
-        # Get all keys from the most recent action
-        for key in action:
-            values = []
-            weights_to_use = []
-
-            # Collect values from buffer (some old actions might not have all keys)
-            for i, buffered_action in enumerate(self.action_buffer):
-                if key in buffered_action:
-                    values.append(buffered_action[key])
-                    weights_to_use.append(self.weights[i])
-
-            if not values:
-                # Key not found in any buffered action
-                smoothed_action[key] = action[key]
-                continue
-
-            # Normalize weights for available values
-            weight_sum = sum(weights_to_use)
-            normalized_weights = [w / weight_sum for w in weights_to_use]
-
-            # Compute weighted average
-            if isinstance(values[0], (int, float)):
-                # Scalar value
-                smoothed_action[key] = sum(v * w for v, w in zip(values, normalized_weights, strict=True))
-            else:
-                smoothed_value = sum(v * w for v, w in zip(values, normalized_weights, strict=True))
-                smoothed_action[key] = smoothed_value
-
-        return smoothed_action
 
 
 @dataclass
@@ -258,7 +163,9 @@ class InferConfig:
         return ["policy"]
 
 
-def init_inference_keyboard_listener(play_sounds: bool = True, has_teleop: bool = False):
+def init_inference_keyboard_listener(
+    play_sounds: bool = True, has_teleop: bool = False
+) -> tuple[Any | None, dict]:
     """
     Initializes a keyboard listener for inference control.
 
@@ -323,7 +230,7 @@ def init_inference_keyboard_listener(play_sounds: bool = True, has_teleop: bool 
                 state["exit"] = True
 
         except Exception as e:
-            print(f"Error handling key press: {e}")
+            logging.error(f"Error handling key press: {e}")
 
     listener = keyboard.Listener(on_press=on_press)
     listener.start()
@@ -339,7 +246,7 @@ def _handle_mode_transition(
     preprocessor: PolicyProcessorPipeline[dict[str, Any], dict[str, Any]] | None = None,
     postprocessor: PolicyProcessorPipeline[PolicyAction, PolicyAction] | None = None,
     temporal_ensembler: TemporalEnsembler | None = None,
-):
+) -> None:
     """
     Handle transitions between control modes, managing teleoperator motor torque and policy state.
 
@@ -359,7 +266,7 @@ def _handle_mode_transition(
         return
 
     try:
-        # Entering TELEOP mode - set zero gains so user can move freely
+        # Entering TELEOP mode - disable torque so user can move freely and reset policy state
         if current_mode == ControlMode.TELEOP and previous_mode != ControlMode.TELEOP:
             if isinstance(teleop, list):
                 if teleop_arm is not None and hasattr(teleop_arm, "bus"):
@@ -423,7 +330,7 @@ def _sync_teleop_with_robot(
     teleop: Teleoperator | list[Teleoperator],
     robot_obs: RobotObservation,
     teleop_arm: Teleoperator | None = None,
-):
+) -> None:
     """
     Synchronize teleoperator position with robot observation.
     This allows smooth takeover when switching from policy to teleoperation mode.
@@ -483,7 +390,7 @@ def inference_loop(
     task: str | None = None,
     display_data: bool = False,
     play_sounds: bool = True,
-):
+) -> None:
     """Main inference loop that switches between policy and teleoperation control."""
 
     teleop_arm = teleop_keyboard = None
@@ -507,6 +414,9 @@ def inference_loop(
 
     if temporal_ensembler.enabled:
         logging.info(f"Temporal ensembling enabled: k={temporal_ensembler.k}, exp={temporal_ensembler.exp}")
+
+    # Compute device once outside the loop to avoid repeated backend checks
+    policy_device = get_safe_torch_device(policy.config.device)
 
     log_say(
         "Inference ready. Press 'p' or Space to start policy control, 't' for teleoperation, 'r' to reset, Esc to exit.",
@@ -549,7 +459,7 @@ def inference_loop(
             action_values = predict_action(
                 observation=observation_frame,
                 policy=policy,
-                device=get_safe_torch_device(policy.config.device),
+                device=policy_device,
                 preprocessor=preprocessor,
                 postprocessor=postprocessor,
                 use_amp=policy.config.use_amp,
@@ -621,7 +531,7 @@ def inference_loop(
 
 
 @parser.wrap()
-def infer(cfg: InferConfig):
+def infer(cfg: InferConfig) -> None:
     """Main inference function."""
     init_logging()
     logging.info(pformat(asdict(cfg)))
@@ -633,71 +543,88 @@ def infer(cfg: InferConfig):
     robot = make_robot_from_config(cfg.robot)
     teleop = make_teleoperator_from_config(cfg.teleop) if cfg.teleop is not None else None
 
-    robot.connect()
-    if teleop is not None:
-        teleop.connect()
-
-    # Create processors
-    teleop_action_processor, robot_action_processor, robot_observation_processor = make_default_processors()
-
-    # Build dataset features for policy (needed for observation frame building)
-    # We need image features to be included in the dataset_features for proper frame building
-    dataset_features = combine_feature_dicts(
-        aggregate_pipeline_dataset_features(
-            pipeline=teleop_action_processor,
-            initial_features=create_initial_features(action=robot.action_features),
-            use_videos=True,  # Need image features for policy inference
-        ),
-        aggregate_pipeline_dataset_features(
-            pipeline=robot_observation_processor,
-            initial_features=create_initial_features(observation=robot.observation_features),
-            use_videos=True,  # Need image features for policy inference
-        ),
-    )
-
-    # We need dataset metadata for the policy, so create a minimal in-memory dataset structure
-    # Clean up any existing temp directory first
-    temp_dataset_path = Path(cfg.temp_dataset_dir)
-    if temp_dataset_path.exists():
-        logging.info(f"Cleaning up existing temporary dataset directory: {temp_dataset_path}")
-        shutil.rmtree(temp_dataset_path)
-
-    # Create temporary dataset just to get metadata for policy
-    temp_dataset = LeRobotDataset.create(
-        repo_id="temp/inference_dataset",
-        fps=cfg.fps,
-        root=cfg.temp_dataset_dir,
-        robot_type=robot.name,
-        features=dataset_features,
-        use_videos=True,  # Must match dataset_features having video features
-    )
-
-    # Load policy with dataset metadata
-    policy = make_policy(cfg.policy, ds_meta=temp_dataset.meta, rename_map=cfg.rename_map)
-
-    # Create preprocessor and postprocessor
-    preprocessor, postprocessor = make_pre_post_processors(
-        policy_cfg=cfg.policy,
-        pretrained_path=cfg.policy.pretrained_path,
-        dataset_stats=rename_stats(temp_dataset.meta.stats, cfg.rename_map),
-        preprocessor_overrides={
-            "device_processor": {"device": cfg.policy.device},
-            "rename_observations_processor": {"rename_map": cfg.rename_map},
-        },
-    )
-
-    # Initialize temporal ensembler for action smoothing
-    temporal_ensembler = TemporalEnsembler(
-        k=cfg.temporal_ensemble_k,
-        exp=cfg.temporal_ensemble_exp,
-    )
-
-    # Initialize keyboard listener
-    listener, state = init_inference_keyboard_listener(
-        play_sounds=cfg.play_sounds, has_teleop=teleop is not None
-    )
+    listener = None
 
     try:
+        robot.connect()
+        if teleop is not None:
+            teleop.connect()
+
+        # Create processors
+        teleop_action_processor, robot_action_processor, robot_observation_processor = make_default_processors()
+
+        # Build dataset features for policy (needed for observation frame building)
+        # We need image features to be included in the dataset_features for proper frame building
+        dataset_features = combine_feature_dicts(
+            aggregate_pipeline_dataset_features(
+                pipeline=teleop_action_processor,
+                initial_features=create_initial_features(action=robot.action_features),
+                use_videos=True,  # Need image features for policy inference
+            ),
+            aggregate_pipeline_dataset_features(
+                pipeline=robot_observation_processor,
+                initial_features=create_initial_features(observation=robot.observation_features),
+                use_videos=True,  # Need image features for policy inference
+            ),
+        )
+
+        # We need dataset metadata for the policy, so create a minimal in-memory dataset structure
+        # Clean up any existing temp directory first
+        temp_dataset_path = Path(cfg.temp_dataset_dir)
+        if temp_dataset_path.exists():
+            resolved_temp_path = temp_dataset_path.resolve()
+            # Avoid deleting obviously unsafe locations such as filesystem root or the user's home directory
+            if resolved_temp_path in (Path("/"), Path.home()):
+                logging.warning(
+                    "Refusing to delete potentially unsafe temporary dataset directory: %s",
+                    resolved_temp_path,
+                )
+            else:
+                logging.info("Cleaning up existing temporary dataset directory: %s", resolved_temp_path)
+                try:
+                    shutil.rmtree(resolved_temp_path)
+                except Exception:
+                    # Do not abort inference if cleanup fails; log and continue
+                    logging.warning(
+                        "Failed to delete temporary dataset directory %s; continuing without aborting inference.",
+                        resolved_temp_path,
+                        exc_info=True,
+                    )
+
+        # Create temporary dataset just to get metadata for policy
+        temp_dataset = LeRobotDataset.create(
+            repo_id="temp/inference_dataset",
+            fps=cfg.fps,
+            root=cfg.temp_dataset_dir,
+            robot_type=robot.name,
+            features=dataset_features,
+            use_videos=True,  # Must match dataset_features having video features
+        )
+
+        # Load policy with dataset metadata
+        policy = make_policy(cfg.policy, ds_meta=temp_dataset.meta, rename_map=cfg.rename_map)
+
+        # Create preprocessor and postprocessor
+        preprocessor, postprocessor = make_pre_post_processors(
+            policy_cfg=cfg.policy,
+            pretrained_path=cfg.policy.pretrained_path,
+            dataset_stats=rename_stats(temp_dataset.meta.stats, cfg.rename_map),
+            preprocessor_overrides={
+                "device_processor": {"device": cfg.policy.device},
+                "rename_observations_processor": {"rename_map": cfg.rename_map},
+            },
+        )
+
+        # Initialize temporal ensembler for action smoothing
+        temporal_ensembler = TemporalEnsembler(
+            k=cfg.temporal_ensemble_k,
+            exp=cfg.temporal_ensemble_exp,
+        )
+
+        # Initialize keyboard listener
+        listener, state = init_inference_keyboard_listener(
+            play_sounds=cfg.play_sounds, has_teleop=teleop is not None
+        )
         # Run inference loop
         inference_loop(
             robot=robot,
@@ -718,8 +645,9 @@ def infer(cfg: InferConfig):
         )
     finally:
         # Cleanup
-        robot.disconnect()
-        if teleop is not None:
+        if robot.is_connected:
+            robot.disconnect()
+        if teleop is not None and teleop.is_connected:
             teleop.disconnect()
         if listener is not None:
             listener.stop()
@@ -733,13 +661,30 @@ def infer(cfg: InferConfig):
         # Clean up temporary dataset directory
         temp_dataset_path = Path(cfg.temp_dataset_dir)
         if temp_dataset_path.exists():
-            logging.info(f"Cleaning up temporary dataset directory: {temp_dataset_path}")
-            shutil.rmtree(temp_dataset_path)
+            resolved_temp_path = temp_dataset_path.resolve()
+            # Avoid deleting obviously unsafe locations such as filesystem root or the user's home directory
+            if resolved_temp_path in (Path("/"), Path.home()):
+                logging.warning(
+                    "Refusing to delete potentially unsafe temporary dataset directory: %s",
+                    resolved_temp_path,
+                )
+            else:
+                logging.info("Cleaning up temporary dataset directory: %s", resolved_temp_path)
+                try:
+                    shutil.rmtree(resolved_temp_path)
+                except Exception:
+                    # Do not abort cleanup if deletion fails; log and continue
+                    logging.warning(
+                        "Failed to delete temporary dataset directory %s; continuing without aborting cleanup.",
+                        resolved_temp_path,
+                        exc_info=True,
+                    )
 
         log_say("Inference stopped", cfg.play_sounds)
 
 
-def main():
+def main() -> None:
+    """Run the inference script."""
     register_third_party_plugins()
     infer()
 
