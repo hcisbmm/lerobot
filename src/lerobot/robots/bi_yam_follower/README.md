@@ -215,10 +215,13 @@ lerobot-teleoperate \
   --teleop.right_arm_port=5001 \
   --display_data=true \
   --robot.cameras='{
+    top: {"type": "intelrealsense", "serial_number_or_name": "141722076304", "width": 640, "height": 480, "fps": 30},
     left: {"type": "intelrealsense", "serial_number_or_name": "335122271633", "width": 1280, "height": 720, "fps": 30},
     right: {"type": "intelrealsense", "serial_number_or_name": "323622271837", "width": 1280, "height": 720, "fps": 30}
   }'
 ```
+
+**Note:** The top camera (D435, serial 141722076304) is configured at 640x480 instead of 1280x720 because the D435 model does not support 1280x720 at 30fps. All cameras are kept at 30fps for synchronized data collection. The left and right cameras (D405 models) support the full 1280x720@30fps.
 
 **Using OpenCV cameras:**
 
@@ -232,6 +235,7 @@ lerobot-teleoperate \
   --teleop.right_arm_port=5001 \
   --display_data=true \
   --robot.cameras='{
+    top: {"type": "intelrealsense", "serial_number_or_name": "141722076304", "width": 640, "height": 480, "fps": 30},
     left: {"type": "opencv", "index_or_path": 2, "width": 1280, "height": 720, "fps": 30},
     right: {"type": "opencv", "index_or_path": 10, "width": 1280, "height": 720, "fps": 30}
   }'
@@ -255,6 +259,7 @@ lerobot-record \
   --robot.left_arm_port=1235 \
   --robot.right_arm_port=1234 \
   --robot.cameras='{
+    top: {"type": "intelrealsense", "serial_number_or_name": "141722076304", "width": 640, "height": 480, "fps": 30},
     left: {"type": "intelrealsense", "serial_number_or_name": "335122271633", "width": 1280, "height": 720, "fps": 30},
     right: {"type": "intelrealsense", "serial_number_or_name": "323622271837", "width": 1280, "height": 720, "fps": 30}
   }' \
