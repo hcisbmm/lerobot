@@ -499,10 +499,6 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
                 },
             )
 
-        robot.connect()
-        if teleop is not None:
-            teleop.connect()
-
         listener, events = init_keyboard_listener()
 
         with VideoEncodingManager(dataset):
@@ -574,7 +570,7 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
         if not is_headless() and listener:
             listener.stop()
 
-        if cfg.dataset.push_to_hub:
+        if cfg.dataset.push_to_hub and dataset is not None:
             dataset.push_to_hub(tags=cfg.dataset.tags, private=cfg.dataset.private)
 
         log_say("Exiting", cfg.play_sounds)
