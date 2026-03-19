@@ -192,6 +192,19 @@ lerobot-teleoperate \
   --display_data=true
 ```
 
+#### With Torque Input
+```bash
+lerobot-teleoperate \
+  --robot.type=bi_yam_follower \
+  --robot.left_arm_port=1235 \
+  --robot.right_arm_port=1234 \
+  --teleop.type=bi_yam_leader \
+  --teleop.left_arm_port=5002 \
+  --teleop.right_arm_port=5001 \
+  --display_data=true \
+  --record_effort=true
+```
+
 #### Step 2.2: Find Camera
 
 Identify available cameras on your system:
@@ -281,6 +294,28 @@ lerobot-record \
   --dataset.single_task="Pick and place the object" \
   --display_data=true
 ```
+#### With Torque Recording
+```bash
+lerobot-record \
+  --robot.type=bi_yam_follower \
+  --robot.left_arm_port=1235 \
+  --robot.right_arm_port=1234 \
+  --robot.cameras='{
+    top: {"type": "intelrealsense", "serial_number_or_name": "141722076304", "width": 640, "height": 480, "fps": 30},
+    left: {"type": "intelrealsense", "serial_number_or_name": "335122271633", "width": 1280, "height": 720, "fps": 30},
+    right: {"type": "intelrealsense", "serial_number_or_name": "323622271837", "width": 1280, "height": 720, "fps": 30}
+  }' \
+  --teleop.type=bi_yam_leader \
+  --teleop.left_arm_port=5002 \
+  --teleop.right_arm_port=5001 \
+  --dataset.repo_id="HGLLL/bimanual-yam-demo" \
+  --dataset.num_episodes=10 \
+  --dataset.reset_time_s=25 \
+  --dataset.single_task="Pick and place the object" \
+  --display_data=true \
+  --record_effort=true
+```
+
 
 ### Configuration Parameters
 
