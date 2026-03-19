@@ -142,7 +142,7 @@ from lerobot.utils.utils import (
     init_logging,
     log_say,
 )
-from lerobot.utils.visualization_utils import init_rerun, log_rerun_data
+from lerobot.utils.visualization_utils import TorqueVisualizer, init_rerun, log_rerun_data
 
 
 @dataclass
@@ -212,6 +212,10 @@ class RecordConfig:
     play_sounds: bool = True
     # Resume recording on an existing dataset.
     resume: bool = False
+    # Show real-time torque plot (requires follower arms with effort sensing)
+    show_torque: bool = False
+    # Only show end-effector (gripper) torques in torque plot
+    show_torque_ee_only: bool = False
 
     def __post_init__(self):
         # HACK: We parse again the cli args here to get the pretrained path if there was one.
@@ -285,6 +289,7 @@ def record_loop(
     single_task: str | None = None,
     display_data: bool = False,
     display_compressed_images: bool = False,
+    torque_visualizer: TorqueVisualizer | None = None,
 ):
     if dataset is not None and dataset.fps != fps:
         raise ValueError(f"The dataset fps should be equal to requested fps ({dataset.fps} != {fps}).")
@@ -387,6 +392,9 @@ def record_loop(
         # so action actually sent is saved in the dataset. action = postprocessor.process(action)
         # TODO(steven, pepijn, adil): we should use a pipeline step to clip the action, so the sent action is the action that we input to the robot.
         _sent_action = robot.send_action(robot_action_to_send)
+
+        if torque_visualizer is not None:
+            torque_visualizer.update(obs)
 
         # Write to dataset
         if dataset is not None:
@@ -499,9 +507,9 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
                 },
             )
 
-        robot.connect()
-        if teleop is not None:
-            teleop.connect()
+        torque_viz = None
+        if cfg.show_torque:
+            torque_viz = TorqueVisualizer(ee_only=cfg.show_torque_ee_only)
 
         listener, events = init_keyboard_listener()
 
@@ -525,6 +533,7 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
                     single_task=cfg.dataset.single_task,
                     display_data=cfg.display_data,
                     display_compressed_images=display_compressed_images,
+                    torque_visualizer=torque_viz,
                 )
 
                 # Execute a few seconds without recording to give time to manually reset the environment
@@ -549,6 +558,7 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
                         control_time_s=cfg.dataset.reset_time_s,
                         single_task=cfg.dataset.single_task,
                         display_data=cfg.display_data,
+                        torque_visualizer=torque_viz,
                     )
 
                 if events["rerecord_episode"]:
@@ -563,6 +573,9 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
     finally:
         log_say("Stop recording", cfg.play_sounds, blocking=True)
 
+        if torque_viz is not None:
+            torque_viz.close()
+
         if dataset:
             dataset.finalize()
 
@@ -574,7 +587,7 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
         if not is_headless() and listener:
             listener.stop()
 
-        if cfg.dataset.push_to_hub:
+        if cfg.dataset.push_to_hub and dataset is not None:
             dataset.push_to_hub(tags=cfg.dataset.tags, private=cfg.dataset.private)
 
         log_say("Exiting", cfg.play_sounds)

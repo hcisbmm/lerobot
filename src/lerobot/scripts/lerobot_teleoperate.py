@@ -103,7 +103,7 @@ from lerobot.teleoperators import (  # noqa: F401
 from lerobot.utils.import_utils import register_third_party_plugins
 from lerobot.utils.robot_utils import precise_sleep
 from lerobot.utils.utils import init_logging, move_cursor_up
-from lerobot.utils.visualization_utils import init_rerun, log_rerun_data
+from lerobot.utils.visualization_utils import TorqueVisualizer, init_rerun, log_rerun_data
 
 
 @dataclass
@@ -122,6 +122,10 @@ class TeleoperateConfig:
     display_port: int | None = None
     # Whether to  display compressed images in Rerun
     display_compressed_images: bool = False
+    # Show real-time torque plot (requires follower arms with effort sensing)
+    show_torque: bool = False
+    # Only show end-effector (gripper) torques in torque plot
+    show_torque_ee_only: bool = False
 
 
 def teleop_loop(
@@ -134,6 +138,7 @@ def teleop_loop(
     display_data: bool = False,
     duration: float | None = None,
     display_compressed_images: bool = False,
+    torque_visualizer: TorqueVisualizer | None = None,
 ):
     """
     This function continuously reads actions from a teleoperation device, processes them through optional
@@ -175,6 +180,9 @@ def teleop_loop(
 
         # Send processed action to robot (robot_action_processor.to_output should return RobotAction)
         _ = robot.send_action(robot_action_to_send)
+
+        if torque_visualizer is not None:
+            torque_visualizer.update(obs)
 
         if display_data:
             # Process robot observation through pipeline
@@ -222,6 +230,10 @@ def teleoperate(cfg: TeleoperateConfig):
     teleop.connect()
     robot.connect()
 
+    torque_viz = None
+    if cfg.show_torque:
+        torque_viz = TorqueVisualizer(ee_only=cfg.show_torque_ee_only)
+
     try:
         teleop_loop(
             teleop=teleop,
@@ -233,10 +245,13 @@ def teleoperate(cfg: TeleoperateConfig):
             robot_action_processor=robot_action_processor,
             robot_observation_processor=robot_observation_processor,
             display_compressed_images=display_compressed_images,
+            torque_visualizer=torque_viz,
         )
     except KeyboardInterrupt:
         pass
     finally:
+        if torque_viz is not None:
+            torque_viz.close()
         if cfg.display_data:
             rr.rerun_shutdown()
         teleop.disconnect()

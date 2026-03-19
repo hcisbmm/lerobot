@@ -266,6 +266,15 @@ class BiYamFollower(Robot):
             else:
                 obs_dict[f"left_joint_{i}.pos"] = pos
 
+        # Include effort/torque data if available (follower arms only)
+        if "joint_eff" in left_obs:
+            left_eff = left_obs["joint_eff"]
+            for i, eff in enumerate(left_eff):
+                if left_has_gripper and i == len(left_eff) - 1:
+                    obs_dict["left_gripper.eff"] = eff
+                else:
+                    obs_dict[f"left_joint_{i}.eff"] = eff
+
         # Get right arm observations
         right_obs = self.right_arm.get_observations()
         right_joint_pos = right_obs["joint_pos"]
@@ -280,6 +289,15 @@ class BiYamFollower(Robot):
                 obs_dict["right_gripper.pos"] = pos
             else:
                 obs_dict[f"right_joint_{i}.pos"] = pos
+
+        # Include effort/torque data if available (follower arms only)
+        if "joint_eff" in right_obs:
+            right_eff = right_obs["joint_eff"]
+            for i, eff in enumerate(right_eff):
+                if right_has_gripper and i == len(right_eff) - 1:
+                    obs_dict["right_gripper.eff"] = eff
+                else:
+                    obs_dict[f"right_joint_{i}.eff"] = eff
 
         # Get camera observations only if requested
         if include_cameras:

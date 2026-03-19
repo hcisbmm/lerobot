@@ -168,6 +168,15 @@ Leave this terminal running while recording data.
 
 ### Step 2: Testing and Setup
 
+#### Step 2.0: torque visualizer
+
+you can add flag below to visualize the torque output
+
+```bash
+  --show_torque=true \
+  --show_torque_ee_only=true
+```
+
 #### Step 2.1: Test Teleoperator (In another terminal)
 
 Before recording, test that the teleoperator connection works:
@@ -266,8 +275,9 @@ lerobot-record \
   --teleop.type=bi_yam_leader \
   --teleop.left_arm_port=5002 \
   --teleop.right_arm_port=5001 \
-  --dataset.repo_id=${HF_USER}/bimanual-yam-demo \
+  --dataset.repo_id="HGLLL/bimanual-yam-demo" \
   --dataset.num_episodes=10 \
+  --dataset.reset_time_s=25 \
   --dataset.single_task="Pick and place the object" \
   --display_data=true
 ```
