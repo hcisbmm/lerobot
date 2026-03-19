@@ -126,6 +126,8 @@ class TeleoperateConfig:
     show_torque: bool = False
     # Only show end-effector (gripper) torques in torque plot
     show_torque_ee_only: bool = False
+    # Include joint effort/torque data in observations (for Rerun display)
+    record_effort: bool = False
 
 
 def teleop_loop(
@@ -139,6 +141,7 @@ def teleop_loop(
     duration: float | None = None,
     display_compressed_images: bool = False,
     torque_visualizer: TorqueVisualizer | None = None,
+    record_effort: bool = False,
 ):
     """
     This function continuously reads actions from a teleoperation device, processes them through optional
@@ -168,6 +171,10 @@ def teleop_loop(
         # teleop_action_processor can take None as an observation
         # given that it is the identity processor as default
         obs = robot.get_observation()
+
+        # Strip .eff keys when effort recording is disabled
+        if not record_effort:
+            obs = {k: v for k, v in obs.items() if not k.endswith(".eff")}
 
         # Get teleop action
         raw_action = teleop.get_action()
@@ -246,6 +253,7 @@ def teleoperate(cfg: TeleoperateConfig):
             robot_observation_processor=robot_observation_processor,
             display_compressed_images=display_compressed_images,
             torque_visualizer=torque_viz,
+            record_effort=cfg.record_effort,
         )
     except KeyboardInterrupt:
         pass

@@ -216,6 +216,8 @@ class RecordConfig:
     show_torque: bool = False
     # Only show end-effector (gripper) torques in torque plot
     show_torque_ee_only: bool = False
+    # Include joint effort/torque data in recorded observations
+    record_effort: bool = False
 
     def __post_init__(self):
         # HACK: We parse again the cli args here to get the pretrained path if there was one.
@@ -290,6 +292,7 @@ def record_loop(
     display_data: bool = False,
     display_compressed_images: bool = False,
     torque_visualizer: TorqueVisualizer | None = None,
+    record_effort: bool = False,
 ):
     if dataset is not None and dataset.fps != fps:
         raise ValueError(f"The dataset fps should be equal to requested fps ({dataset.fps} != {fps}).")
@@ -336,6 +339,10 @@ def record_loop(
 
         # Get robot observation
         obs = robot.get_observation()
+
+        # Strip .eff keys when effort recording is disabled
+        if not record_effort:
+            obs = {k: v for k, v in obs.items() if not k.endswith(".eff")}
 
         # Applies a pipeline to the raw robot observation, default is IdentityProcessor
         obs_processed = robot_observation_processor(obs)
@@ -443,6 +450,11 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
 
     teleop_action_processor, robot_action_processor, robot_observation_processor = make_default_processors()
 
+    # Filter .eff keys from observation features when record_effort is disabled
+    obs_features = robot.observation_features
+    if not cfg.record_effort:
+        obs_features = {k: v for k, v in obs_features.items() if not k.endswith(".eff")}
+
     dataset_features = combine_feature_dicts(
         aggregate_pipeline_dataset_features(
             pipeline=teleop_action_processor,
@@ -453,7 +465,7 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
         ),
         aggregate_pipeline_dataset_features(
             pipeline=robot_observation_processor,
-            initial_features=create_initial_features(observation=robot.observation_features),
+            initial_features=create_initial_features(observation=obs_features),
             use_videos=cfg.dataset.video,
         ),
     )
@@ -534,6 +546,7 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
                     display_data=cfg.display_data,
                     display_compressed_images=display_compressed_images,
                     torque_visualizer=torque_viz,
+                    record_effort=cfg.record_effort,
                 )
 
                 # Execute a few seconds without recording to give time to manually reset the environment
@@ -559,6 +572,7 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
                         single_task=cfg.dataset.single_task,
                         display_data=cfg.display_data,
                         torque_visualizer=torque_viz,
+                        record_effort=cfg.record_effort,
                     )
 
                 if events["rerecord_episode"]:

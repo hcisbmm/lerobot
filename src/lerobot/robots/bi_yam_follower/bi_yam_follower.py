@@ -158,6 +158,31 @@ class BiYamFollower(Robot):
         return features
 
     @property
+    def _effort_ft(self) -> dict[str, type]:
+        """Define effort/torque feature types for both arms (mirrors _motors_ft with .eff suffix)."""
+        if self._left_dofs is None or self._right_dofs is None:
+            left_dofs = 7
+            right_dofs = 7
+        else:
+            left_dofs = self._left_dofs
+            right_dofs = self._right_dofs
+
+        features = {}
+        for i in range(left_dofs):
+            if left_dofs == 7 and i == left_dofs - 1:
+                features["left_gripper.eff"] = float
+            else:
+                features[f"left_joint_{i}.eff"] = float
+
+        for i in range(right_dofs):
+            if right_dofs == 7 and i == right_dofs - 1:
+                features["right_gripper.eff"] = float
+            else:
+                features[f"right_joint_{i}.eff"] = float
+
+        return features
+
+    @property
     def _cameras_ft(self) -> dict[str, tuple]:
         """Define camera feature types."""
         return {
@@ -166,8 +191,8 @@ class BiYamFollower(Robot):
 
     @cached_property
     def observation_features(self) -> dict[str, type | tuple]:
-        """Return observation features including motors and cameras."""
-        return {**self._motors_ft, **self._cameras_ft}
+        """Return observation features including motors, effort/torque, and cameras."""
+        return {**self._motors_ft, **self._effort_ft, **self._cameras_ft}
 
     @cached_property
     def action_features(self) -> dict[str, type]:
@@ -298,6 +323,11 @@ class BiYamFollower(Robot):
                     obs_dict["right_gripper.eff"] = eff
                 else:
                     obs_dict[f"right_joint_{i}.eff"] = eff
+
+        # Fill any missing .eff keys with 0.0 (declared in features but hardware may not supply them)
+        for key in self._effort_ft:
+            if key not in obs_dict:
+                obs_dict[key] = 0.0
 
         # Get camera observations only if requested
         if include_cameras:
