@@ -1,3 +1,4 @@
+
 #!/usr/bin/env python
 
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
@@ -16,7 +17,8 @@
 
 from dataclasses import dataclass, field
 
-from lerobot.cameras import CameraConfig
+from lerobot.cameras.configs import CameraConfig, Cv2Rotation
+from lerobot.cameras.opencv.configuration_opencv import OpenCVCameraConfig
 
 from ..config import RobotConfig
 
@@ -37,5 +39,40 @@ class BiYamFollowerConfig(RobotConfig):
     left_arm_max_relative_target: float | dict[str, float] | None = None
     right_arm_max_relative_target: float | dict[str, float] | None = None
 
+    # Palm camera toggle and settings
+    # Enable with --robot.use_palm_camera=true
+    # Use palm_camera_fourcc="MJPG" and palm_camera_fps=30 for higher frame rate
+    use_palm_camera: bool = False
+    palm_camera_fps: int = 10
+    palm_camera_fourcc: str | None = None
+
     # Cameras (shared between both arms)
+    # When use_palm_camera=true, palm cameras are merged with any explicitly provided cameras
     cameras: dict[str, CameraConfig] = field(default_factory=dict)
+
+    def __post_init__(self):
+        if self.use_palm_camera:
+            palm_cameras: dict[str, CameraConfig] = {
+                "left_palm": OpenCVCameraConfig(
+                    index_or_path="/dev/v4l/by-path/pci-0000:00:14.0-usb-0:10.2.2.4:1.0-video-index0",
+                    fps=self.palm_camera_fps,
+                    width=640,
+                    height=640,
+                    rotation=Cv2Rotation.ROTATE_90,
+                    warmup_s=3,
+                    fourcc=self.palm_camera_fourcc,
+                ),
+                "right_palm": OpenCVCameraConfig(
+                    index_or_path="/dev/v4l/by-id/usb-Arducam_Technology_Co.__Ltd._USB_2.0_Camera_SN0001-video-index0",
+                    fps=self.palm_camera_fps,
+                    width=640,
+                    height=640,
+                    rotation=Cv2Rotation.NO_ROTATION,
+                    warmup_s=3,
+                    fourcc=self.palm_camera_fourcc,
+                ),
+            }
+            # Merge: palm cameras as base, explicit --robot.cameras overrides on collision
+            palm_cameras.update(self.cameras)
+            self.cameras = palm_cameras
+        super().__post_init__()

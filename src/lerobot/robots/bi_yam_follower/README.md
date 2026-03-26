@@ -168,15 +168,6 @@ Leave this terminal running while recording data.
 
 ### Step 2: Testing and Setup
 
-#### Step 2.0: torque visualizer
-
-you can add flag below to visualize the torque output
-
-```bash
-  --show_torque=true \
-  --show_torque_ee_only=true
-```
-
 #### Step 2.1: Test Teleoperator (In another terminal)
 
 Before recording, test that the teleoperator connection works:
@@ -221,9 +212,67 @@ lerobot-find-cameras opencv
 
 For the following steps, adjust the camera `index_or_path` based on the output from this command.
 
+#### Palm Camera Setup
+
+The default config includes two palm cameras (`left_palm`, `right_palm`) using OpenCV. Before using them, you need to set their stable device paths:
+
+1. **Find stable device paths** (persistent across reboots):
+
+```bash
+ls -la /dev/v4l/by-id/
+```
+
+This shows symlinks like:
+```
+usb-<Manufacturer>_<Model>_<Serial>-video-index0 -> ../../video21
+```
+
+2. **Update the config** in `config_bi_yam_follower.py` — replace the placeholder `index_or_path` values with your actual paths:
+
+```python
+"left_palm": OpenCVCameraConfig(
+    index_or_path="/dev/v4l/by-id/usb-YOUR_LEFT_CAMERA-video-index0",
+    fps=30, width=640, height=480,
+    rotation=Cv2Rotation.NO_ROTATION,
+),
+```
+
+3. **Rotation options** — if your camera image is sideways or upside down, change the `rotation` parameter:
+   - `Cv2Rotation.NO_ROTATION` (0°)
+   - `Cv2Rotation.ROTATE_90` (90° clockwise)
+   - `Cv2Rotation.ROTATE_180` (180°)
+   - `Cv2Rotation.ROTATE_270` (270° clockwise / 90° counter-clockwise)
+
+   Note: `width` and `height` in the config represent the **post-rotation** output dimensions.
+
 #### Step 2.3: Test Camera + Teleoperator
 
 Note: Replace the `index_or_path` values with the camera indices found in the previous step. If you have different cameras or want to use different settings, adjust the camera configuration accordingly.
+
+**Using default palm cameras (configured in `config_bi_yam_follower.py`):**
+
+```bash
+lerobot-teleoperate \
+  --robot.type=bi_yam_follower \
+  --teleop.type=bi_yam_leader \
+  --display_data=true
+```
+
+Palm camera frames will appear in the Rerun viewer as `observation.left_palm` and `observation.right_palm`.
+
+**Using palm cameras + RealSense top camera (CLI override):**
+
+```bash
+lerobot-teleoperate \
+  --robot.type=bi_yam_follower \
+  --teleop.type=bi_yam_leader \
+  --display_data=true \
+  --robot.cameras='{
+    left_palm: {"type": "opencv", "index_or_path": "/dev/v4l/by-id/YOUR_LEFT_CAMERA", "width": 640, "height": 480, "fps": 30},
+    right_palm: {"type": "opencv", "index_or_path": "/dev/v4l/by-id/YOUR_RIGHT_CAMERA", "width": 640, "height": 480, "fps": 30},
+    top: {"type": "intelrealsense", "serial_number_or_name": "141722076304", "width": 640, "height": 480, "fps": 30}
+  }'
+```
 
 **Using Intel RealSense cameras:**
 
@@ -273,7 +322,21 @@ uvx hf auth login
 
 ### Step 3: Record Data with LeRobot
 
-In a new terminal, use `lerobot-record` to collect data:
+In a new terminal, use `lerobot-record` to collect data.
+
+**With default palm cameras:**
+
+```bash
+lerobot-record \
+  --robot.type=bi_yam_follower \
+  --teleop.type=bi_yam_leader \
+  --dataset.repo_id="${HF_USER}/bimanual-yam-palm-demo" \
+  --dataset.num_episodes=10 \
+  --dataset.single_task="Pick and place the object" \
+  --display_data=true
+```
+
+**With RealSense cameras (original setup):**
 
 ```bash
 lerobot-record \
