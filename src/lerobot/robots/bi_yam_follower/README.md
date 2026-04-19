@@ -268,10 +268,12 @@ lerobot-teleoperate \
   --teleop.type=bi_yam_leader \
   --display_data=true \
   --robot.cameras='{
-    left_palm: {"type": "opencv", "index_or_path": "/dev/v4l/by-id/YOUR_LEFT_CAMERA", "width": 640, "height": 480, "fps": 30},
-    right_palm: {"type": "opencv", "index_or_path": "/dev/v4l/by-id/YOUR_RIGHT_CAMERA", "width": 640, "height": 480, "fps": 30},
-    top: {"type": "intelrealsense", "serial_number_or_name": "141722076304", "width": 640, "height": 480, "fps": 30}
-  }'
+    top: {"type": "intelrealsense", "serial_number_or_name": "141722076304", "width": 640, "height": 480, "fps": 30},
+    left: {"type": "intelrealsense", "serial_number_or_name": "335122271633", "width": 1280, "height": 720, "fps": 30},
+    right: {"type": "intelrealsense", "serial_number_or_name": "323622271837", "width": 1280, "height": 720, "fps": 30}
+  }' \
+  --robot.use_palm_camera=true
+  
 ```
 
 **Using Intel RealSense cameras:**

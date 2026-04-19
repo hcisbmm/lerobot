@@ -43,8 +43,8 @@ class BiYamFollowerConfig(RobotConfig):
     # Enable with --robot.use_palm_camera=true
     # Use palm_camera_fourcc="MJPG" and palm_camera_fps=30 for higher frame rate
     use_palm_camera: bool = False
-    palm_camera_fps: int = 10
-    palm_camera_fourcc: str | None = None
+    palm_camera_fps: int = 30
+    palm_camera_fourcc: str | None = "MJPG"
 
     # Cameras (shared between both arms)
     # When use_palm_camera=true, palm cameras are merged with any explicitly provided cameras
@@ -54,7 +54,7 @@ class BiYamFollowerConfig(RobotConfig):
         if self.use_palm_camera:
             palm_cameras: dict[str, CameraConfig] = {
                 "left_palm": OpenCVCameraConfig(
-                    index_or_path="/dev/v4l/by-path/pci-0000:00:14.0-usb-0:10.2.2.4:1.0-video-index0",
+                    index_or_path="/dev/v4l/by-path/pci-0000:00:14.0-usb-0:6.3.4:1.0-video-index0",
                     fps=self.palm_camera_fps,
                     width=640,
                     height=640,
@@ -62,15 +62,15 @@ class BiYamFollowerConfig(RobotConfig):
                     warmup_s=3,
                     fourcc=self.palm_camera_fourcc,
                 ),
-                "right_palm": OpenCVCameraConfig(
-                    index_or_path="/dev/v4l/by-id/usb-Arducam_Technology_Co.__Ltd._USB_2.0_Camera_SN0001-video-index0",
-                    fps=self.palm_camera_fps,
-                    width=640,
-                    height=640,
-                    rotation=Cv2Rotation.NO_ROTATION,
-                    warmup_s=3,
-                    fourcc=self.palm_camera_fourcc,
-                ),
+                # "right_palm": OpenCVCameraConfig(
+                #     index_or_path="/dev/v4l/by-path/pci-0000:00:14.0-usb-0:2.4.2.4:1.0-video-index0",
+                #     fps=self.palm_camera_fps,
+                #     width=640,
+                #     height=640,
+                #     rotation=Cv2Rotation.NO_ROTATION,
+                #     warmup_s=3,
+                #     fourcc=self.palm_camera_fourcc,
+                # ),
             }
             # Merge: palm cameras as base, explicit --robot.cameras overrides on collision
             palm_cameras.update(self.cameras)

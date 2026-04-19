@@ -330,6 +330,7 @@ def record_loop(
 
     timestamp = 0
     start_episode_t = time.perf_counter()
+    _warned_no_action_source = False
     while timestamp < control_time_s:
         start_loop_t = time.perf_counter()
 
@@ -379,11 +380,16 @@ def record_loop(
             act = {**arm_action, **base_action} if len(base_action) > 0 else arm_action
             act_processed_teleop = teleop_action_processor((act, obs))
         else:
-            logging.info(
-                "No policy or teleoperator provided, skipping action generation."
-                "This is likely to happen when resetting the environment without a teleop device."
-                "The robot won't be at its rest position at the start of the next episode."
-            )
+            if not _warned_no_action_source:
+                logging.info(
+                    "No policy or teleoperator provided, skipping action generation. "
+                    "This is likely to happen when resetting the environment without a teleop device. "
+                    "The robot won't be at its rest position at the start of the next episode."
+                )
+                _warned_no_action_source = True
+            dt_s = time.perf_counter() - start_loop_t
+            precise_sleep(max(1 / fps - dt_s, 0.0))
+            timestamp = time.perf_counter() - start_episode_t
             continue
 
         # Applies a pipeline to the action, default is IdentityProcessor
@@ -587,8 +593,8 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
     finally:
         log_say("Stop recording", cfg.play_sounds, blocking=True)
 
-        if torque_viz is not None:
-            torque_viz.close()
+        # if torque_viz is not None:
+        #     torque_viz.close()
 
         if dataset:
             dataset.finalize()

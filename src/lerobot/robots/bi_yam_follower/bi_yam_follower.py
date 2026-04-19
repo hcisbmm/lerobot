@@ -52,11 +52,13 @@ class YamArmClient:
         self.port = port
         self.host = host
         self._client = None
+        self._last_command_future = None
 
     def connect(self):
         """Connect to the arm server."""
         logger.info(f"Connecting to Yam arm server at {self.host}:{self.port}")
         self._client = portal.Client(f"{self.host}:{self.port}")
+        self._last_command_future = None
         logger.info(f"Successfully connected to Yam arm server at {self.host}:{self.port}")
 
     def disconnect(self):
@@ -64,6 +66,7 @@ class YamArmClient:
         if self._client is not None:
             logger.info(f"Disconnecting from Yam arm server at {self.host}:{self.port}")
             self._client = None
+            self._last_command_future = None
 
     @property
     def is_connected(self) -> bool:
@@ -86,7 +89,10 @@ class YamArmClient:
         """Command joint positions."""
         if self._client is None:
             raise RuntimeError("Client not connected")
-        self._client.command_joint_pos(joint_pos)
+        # Check previous command's result to surface any server-side errors
+        if self._last_command_future is not None:
+            self._last_command_future.result()
+        self._last_command_future = self._client.command_joint_pos(joint_pos)
 
     def get_observations(self) -> dict[str, np.ndarray]:
         """Get current observations including joint positions, velocities, etc."""
@@ -292,13 +298,14 @@ class BiYamFollower(Robot):
                 obs_dict[f"left_joint_{i}.pos"] = pos
 
         # Include effort/torque data if available (follower arms only)
+        # Note: joint_eff contains arm-only values (excludes gripper),
+        # gripper effort is in a separate gripper_eff key
         if "joint_eff" in left_obs:
             left_eff = left_obs["joint_eff"]
             for i, eff in enumerate(left_eff):
-                if left_has_gripper and i == len(left_eff) - 1:
-                    obs_dict["left_gripper.eff"] = eff
-                else:
-                    obs_dict[f"left_joint_{i}.eff"] = eff
+                obs_dict[f"left_joint_{i}.eff"] = eff
+            if "gripper_eff" in left_obs:
+                obs_dict["left_gripper.eff"] = left_obs["gripper_eff"][0]
 
         # Get right arm observations
         right_obs = self.right_arm.get_observations()
@@ -319,10 +326,9 @@ class BiYamFollower(Robot):
         if "joint_eff" in right_obs:
             right_eff = right_obs["joint_eff"]
             for i, eff in enumerate(right_eff):
-                if right_has_gripper and i == len(right_eff) - 1:
-                    obs_dict["right_gripper.eff"] = eff
-                else:
-                    obs_dict[f"right_joint_{i}.eff"] = eff
+                obs_dict[f"right_joint_{i}.eff"] = eff
+            if "gripper_eff" in right_obs:
+                obs_dict["right_gripper.eff"] = right_obs["gripper_eff"][0]
 
         # Fill any missing .eff keys with 0.0 (declared in features but hardware may not supply them)
         for key in self._effort_ft:
@@ -431,8 +437,8 @@ class BiYamFollower(Robot):
                 )
                 left_goal_present[key] = (goal_val, float(left_current[i]))
             safe_left = ensure_safe_goal_position(left_goal_present, self.config.left_arm_max_relative_target)
-            # Extract back to array in order
-            left_action = [safe_left[k] for k in sorted(safe_left.keys())]
+            # Extract back to array in insertion order (preserves [j0..j5, gripper] ordering)
+            left_action = list(safe_left.values())
 
         if self.config.right_arm_max_relative_target is not None and len(right_action) > 0:
             right_current = self.right_arm.get_joint_pos()
@@ -448,8 +454,8 @@ class BiYamFollower(Robot):
             safe_right = ensure_safe_goal_position(
                 right_goal_present, self.config.right_arm_max_relative_target
             )
-            # Extract back to array in order
-            right_action = [safe_right[k] for k in sorted(safe_right.keys())]
+            # Extract back to array in insertion order (preserves [j0..j5, gripper] ordering)
+            right_action = list(safe_right.values())
 
         # Send commands to arms
         if len(left_action) > 0:

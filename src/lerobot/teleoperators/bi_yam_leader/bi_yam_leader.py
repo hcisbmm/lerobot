@@ -288,8 +288,12 @@ class BiYamLeader(Teleoperator):
         if left_has_gripper:
             left_joint_pos = np.concatenate([left_joint_pos, left_obs["gripper_pos"]])
         else:
-            # Teaching handle: try to get gripper from encoder button
-            left_gripper = self.left_arm.get_gripper_from_encoder()
+            # Teaching handle: use io_inputs from already-fetched observations
+            # (avoids redundant RPC call via get_gripper_from_encoder)
+            if "io_inputs" in left_obs:
+                left_gripper = 0.0 if left_obs["io_inputs"][0] > 0.5 else 1.0
+            else:
+                left_gripper = 1.0  # Default to open
             left_joint_pos = np.concatenate([left_joint_pos, [left_gripper]])
             left_has_gripper = True
 
@@ -310,8 +314,11 @@ class BiYamLeader(Teleoperator):
         if right_has_gripper:
             right_joint_pos = np.concatenate([right_joint_pos, right_obs["gripper_pos"]])
         else:
-            # Teaching handle: try to get gripper from encoder button
-            right_gripper = self.right_arm.get_gripper_from_encoder()
+            # Teaching handle: use io_inputs from already-fetched observations
+            if "io_inputs" in right_obs:
+                right_gripper = 0.0 if right_obs["io_inputs"][0] > 0.5 else 1.0
+            else:
+                right_gripper = 1.0  # Default to open
             right_joint_pos = np.concatenate([right_joint_pos, [right_gripper]])
             right_has_gripper = True
 

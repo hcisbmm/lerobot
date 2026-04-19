@@ -48,7 +48,7 @@ import tyro
 from i2rt.robots.get_robot import get_yam_robot
 from i2rt.robots.motor_chain_robot import MotorChainRobot
 from i2rt.robots.robot import Robot
-from i2rt.robots.utils import GripperType
+from i2rt.robots.utils import ArmType, GripperType
 
 
 class ServerRobot:
@@ -94,12 +94,27 @@ class YAMLeaderRobot:
 
     def __init__(self, robot: MotorChainRobot, name: str):
         self._robot = robot
-        self._motor_chain = robot.motor_chain
         self._name = name
 
     def num_dofs(self) -> int:
         """Get number of DOFs (6 joints + 1 gripper)."""
         return 7
+
+    def _read_joint_pos(self) -> np.ndarray:
+        """Read joint positions from cached state (thread-safe)."""
+        return self._robot.get_joint_pos()
+
+    def _read_encoder(self) -> tuple[float, np.ndarray]:
+        """Read encoder state from motor chain (thread-safe), returns (gripper_pos, io_inputs)."""
+        try:
+            encoder_infos = self._robot.motor_chain.get_same_bus_device_states()
+            if encoder_infos is not None:
+                gripper_pos = 1 - encoder_infos[0].position
+                io_inputs = encoder_infos[0].io_inputs
+                return gripper_pos, io_inputs
+        except Exception as e:
+            print(f"[{self._name}] Warning: Could not read encoder state: {e}")
+        return 1.0, np.array([0.0])
 
     def get_joint_pos(self) -> np.ndarray:
         """Get leader arm state including gripper encoder.
@@ -107,18 +122,9 @@ class YAMLeaderRobot:
         Returns:
             np.ndarray: Joint positions with gripper (7 values)
         """
-        qpos = self._robot.get_observations()["joint_pos"]
-        try:
-            encoder_obs = self._motor_chain.get_same_bus_device_states()
-            time.sleep(0.01)
-            # Encoder position mapped to gripper (0=closed, 1=open)
-            gripper_pos = 1 - encoder_obs[0].position
-        except Exception as e:
-            print(f"[{self._name}] Warning: Could not read encoder state: {e}")
-            # Fallback to default open position
-            gripper_pos = 1.0
-        qpos_with_gripper = np.concatenate([qpos, [gripper_pos]])
-        return qpos_with_gripper
+        qpos = self._read_joint_pos()
+        gripper_pos, _ = self._read_encoder()
+        return np.concatenate([qpos, [gripper_pos]])
 
     def command_joint_pos(self, joint_pos: np.ndarray) -> None:
         """Command the leader arm joint positions (6 joints, excluding gripper).
@@ -148,18 +154,8 @@ class YAMLeaderRobot:
                 - gripper_pos: Encoder position mapped to gripper (0=closed, 1=open)
                 - io_inputs: Button states from encoder
         """
-        qpos = self._robot.get_observations()["joint_pos"]
-        try:
-            encoder_obs = self._motor_chain.get_same_bus_device_states()
-            time.sleep(0.01)
-            # Encoder position mapped to gripper (0=closed, 1=open)
-            gripper_pos = 1 - encoder_obs[0].position
-            io_inputs = encoder_obs[0].io_inputs
-        except Exception as e:
-            print(f"[{self._name}] Warning: Could not read encoder state: {e}")
-            # Provide defaults
-            gripper_pos = 1.0
-            io_inputs = np.array([0.0])
+        qpos = self._read_joint_pos()
+        gripper_pos, io_inputs = self._read_encoder()
 
         return {
             "joint_pos": qpos,
@@ -218,6 +214,12 @@ class Args:
     )
     """Type of gripper/teaching handle on leader arms."""
 
+    follower_arm_type: Literal["yam", "yam_pro", "yam_ultra", "big_yam"] = "yam_ultra"
+    """Type of follower arm hardware."""
+
+    leader_arm_type: Literal["yam", "yam_pro", "yam_ultra", "big_yam"] = "yam"
+    """Type of leader arm hardware."""
+
 
 def main(args: Args) -> None:
     """Main entry point for the bimanual Yam arm server."""
@@ -227,6 +229,8 @@ def main(args: Args) -> None:
 
     follower_gripper_type = GripperType.from_string_name(follower_gripper_name)
     leader_gripper_type = GripperType.from_string_name(leader_gripper_name)
+    follower_arm_type = ArmType.from_string_name(args.follower_arm_type)
+    leader_arm_type = ArmType.from_string_name(args.leader_arm_type)
 
     servers = []
     threads = []
@@ -235,13 +239,13 @@ def main(args: Args) -> None:
         # Initialize and start follower arms
         print("connecting to follower arms...")
         right_follower_robot = get_yam_robot(
-            channel=args.right_follower_can, gripper_type=follower_gripper_type
+            channel=args.right_follower_can, arm_type=follower_arm_type, gripper_type=follower_gripper_type
         )
         right_follower_server = ServerRobot(right_follower_robot, args.right_follower_port, "right_follower")
         servers.append(right_follower_server)
 
         left_follower_robot = get_yam_robot(
-            channel=args.left_follower_can, gripper_type=follower_gripper_type
+            channel=args.left_follower_can, arm_type=follower_arm_type, gripper_type=follower_gripper_type
         )
         left_follower_server = ServerRobot(left_follower_robot, args.left_follower_port, "left_follower")
         servers.append(left_follower_server)
@@ -250,13 +254,13 @@ def main(args: Args) -> None:
         if args.mode == "full":
             print("connecting to leader arms...")
             right_leader_robot = get_yam_robot(
-                channel=args.right_leader_can, gripper_type=leader_gripper_type
+                channel=args.right_leader_can, arm_type=leader_arm_type, gripper_type=leader_gripper_type
             )
             right_leader_wrapped = YAMLeaderRobot(right_leader_robot, "right_leader")
             right_leader_server = ServerRobot(right_leader_wrapped, args.right_leader_port, "right_leader")
             servers.append(right_leader_server)
 
-            left_leader_robot = get_yam_robot(channel=args.left_leader_can, gripper_type=leader_gripper_type)
+            left_leader_robot = get_yam_robot(channel=args.left_leader_can, arm_type=leader_arm_type, gripper_type=leader_gripper_type)
             left_leader_wrapped = YAMLeaderRobot(left_leader_robot, "left_leader")
             left_leader_server = ServerRobot(left_leader_wrapped, args.left_leader_port, "left_leader")
             servers.append(left_leader_server)
