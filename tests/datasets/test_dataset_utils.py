@@ -16,12 +16,32 @@
 
 import pytest
 import torch
-from datasets import Dataset
+
+pytest.importorskip("datasets", reason="datasets is required (install lerobot[dataset])")
+
+from datasets import Dataset  # noqa: E402
 from huggingface_hub import DatasetCard
 
-from lerobot.datasets.push_dataset_to_hub.utils import calculate_episode_data_index
-from lerobot.datasets.utils import combine_feature_dicts, create_lerobot_dataset_card, hf_transform_to_torch
+from lerobot.datasets.io_utils import hf_transform_to_torch
+from lerobot.datasets.utils import create_lerobot_dataset_card
 from lerobot.utils.constants import ACTION, OBS_IMAGES
+from lerobot.utils.feature_utils import combine_feature_dicts
+
+
+def calculate_episode_data_index(hf_dataset: Dataset) -> dict[str, torch.Tensor]:
+    """Calculate episode data index for testing. Returns {"from": Tensor, "to": Tensor}."""
+    episode_data_index: dict[str, list[int]] = {"from": [], "to": []}
+    current_episode = None
+    if len(hf_dataset) == 0:
+        return {"from": torch.tensor([]), "to": torch.tensor([])}
+    for idx, episode_idx in enumerate(hf_dataset["episode_index"]):
+        if episode_idx != current_episode:
+            episode_data_index["from"].append(idx)
+            if current_episode is not None:
+                episode_data_index["to"].append(idx)
+            current_episode = episode_idx
+    episode_data_index["to"].append(idx + 1)
+    return {k: torch.tensor(v) for k, v in episode_data_index.items()}
 
 
 def test_default_parameters():
@@ -131,3 +151,40 @@ def test_non_dict_passthrough_last_wins():
     out = combine_feature_dicts(g1, g2)
     # For non-dict entries the last one wins
     assert out["misc"] == 456
+
+
+# ── get_video_feature_encoding_kwargs ────────────────────────────────
+
+
+def test_get_video_feature_encoding_kwargs_direct_key():
+    """When 'video.codec' is a top-level key, the entire dict is returned."""
+    from lerobot.datasets.feature_utils import get_video_feature_encoding_kwargs
+
+    info = {"video.codec": "libsvtav1", "video.fps": 30, "video.pix_fmt": "yuv420p"}
+    result = get_video_feature_encoding_kwargs(info)
+    assert result == info
+
+
+def test_get_video_feature_encoding_kwargs_nested():
+    """When 'video.codec' is in a nested dict, it is found and that inner dict returned."""
+    from lerobot.datasets.feature_utils import get_video_feature_encoding_kwargs
+
+    inner = {"video.codec": "h264", "video.fps": 25}
+    outer = {"dtype": "video", "shape": (64, 96, 3), "info": inner}
+    result = get_video_feature_encoding_kwargs(outer)
+    assert result == inner
+
+
+def test_get_video_feature_encoding_kwargs_empty():
+    """An empty dict returns {}."""
+    from lerobot.datasets.feature_utils import get_video_feature_encoding_kwargs
+
+    assert get_video_feature_encoding_kwargs({}) == {}
+
+
+def test_get_video_feature_encoding_kwargs_no_codec():
+    """A dict without 'video.codec' anywhere returns {}."""
+    from lerobot.datasets.feature_utils import get_video_feature_encoding_kwargs
+
+    info = {"dtype": "video", "shape": (64, 96, 3), "names": ["h", "w", "c"]}
+    assert get_video_feature_encoding_kwargs(info) == {}
