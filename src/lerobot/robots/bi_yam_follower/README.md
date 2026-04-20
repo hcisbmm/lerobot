@@ -296,6 +296,56 @@ lerobot-teleoperate \
 
 **Note:** The top camera (D435, serial 141722076304) is configured at 640x480 instead of 1280x720 because the D435 model does not support 1280x720 at 30fps. All cameras are kept at 30fps for synchronized data collection. The left and right cameras (D405 models) support the full 1280x720@30fps.
 
+**Teleoperate with live depth stream (RealSense):**
+
+Use the custom `lerobot-teleoperate-with-depth` entry point to verify depth
+sensor output without starting a recording session. It runs the standard
+teleop loop but also reads the depth stream from every camera listed in
+`--depth_cams`, exposing it to Rerun (and any downstream consumer) as an
+additional `{cam}_depth` observation key. Every listed camera must be
+configured with `use_depth=true`.
+
+```bash
+lerobot-teleoperate-with-depth \
+  --robot.type=bi_yam_follower \
+  --robot.left_arm_port=1235 \
+  --robot.right_arm_port=1234 \
+  --robot.cameras='{
+    top:   {"type": "intelrealsense", "serial_number_or_name": "141722076304", "width": 640,  "height": 480, "fps": 30, "use_depth": true},
+    left:  {"type": "intelrealsense", "serial_number_or_name": "335122271633", "width": 1280, "height": 720, "fps": 30, "use_depth": true},
+    right: {"type": "intelrealsense", "serial_number_or_name": "323622271837", "width": 1280, "height": 720, "fps": 30, "use_depth": true}
+  }' \
+  --teleop.type=bi_yam_leader \
+  --teleop.left_arm_port=5002 \
+  --teleop.right_arm_port=5001 \
+  --display_data=true \
+  --fps=30 \
+  --depth_cams='[top, left, right]'
+```
+
+Useful for:
+
+- validating RealSense depth alignment and noise behavior,
+- tuning `MIN_DEPTH_M` / `MAX_DEPTH_M` in
+  `src/lerobot/scripts/lerobot_record_with_depth.py` before recording,
+- checking that all three depth streams are alive before committing to a
+  multi-episode dataset.
+
+**Throughput note (measured on this machine):** with 3 RealSenses at the
+resolutions above AND depth enabled on all three AND `--display_data=true`,
+the teleop loop runs at ~12-20 Hz (median ~15 Hz) rather than the 30 Hz
+target because each frame now carries ~3.7 MB of extra depth data per D405
+plus the Rerun serialization load. Options if you need higher rates:
+
+- Drop the D405s to `848x480` (standard use with depth; cuts throughput ~2.7×).
+- Use `--display_data=false` — Rerun is the biggest single cost after cameras.
+- Lower the target fps explicitly (`--fps=15`) — matches reality and removes
+  sleep churn from the loop warning.
+
+Depth is only supported for cameras whose backend exposes a `read_depth()`
+method — currently that means Intel RealSense. OpenCV / palm USB webcams
+will not produce a depth stream.
+
 **Using OpenCV cameras:**
 
 ```bash
@@ -381,6 +431,58 @@ lerobot-record \
   --record_effort=true
 ```
 
+#### With Depth Video Recording (RealSense)
+
+To additionally capture depth streams from RealSense cameras as lossless-quantized
+video alongside RGB, use the custom `lerobot-record-with-depth` entry point. It
+wraps `lerobot-record` and adds:
+
+- A new `--depth_cams` flag listing cameras to also capture depth from. Every
+  listed camera must be configured with `use_depth=true`.
+- Automatic log-quantization of `uint16` depth (in mm) to 10 bits, packed into
+  the Y plane of `yuv420p10le` and encoded with `libsvtav1` (crf=0). Precision
+  is sub-mm near 0.1 m and ~2 mm near 3.0 m on the default log-scale.
+- Per-feature `video.is_depth_map=True` is stamped on the dataset schema so the
+  reader applies the inverse dequantization at load time.
+
+> **Note:** depth is only supported from cameras whose backend exposes a
+> `read_depth()` method. Currently that means Intel RealSense cameras.
+> OpenCV / palm USB webcams will not produce a depth stream.
+
+```bash
+lerobot-record-with-depth \
+  --robot.type=bi_yam_follower \
+  --robot.left_arm_port=1235 \
+  --robot.right_arm_port=1234 \
+  --robot.cameras='{
+    top:   {"type": "intelrealsense", "serial_number_or_name": "141722076304", "width": 640,  "height": 480, "fps": 30, "use_depth": true},
+    left:  {"type": "intelrealsense", "serial_number_or_name": "335122271633", "width": 1280, "height": 720, "fps": 30, "use_depth": true},
+    right: {"type": "intelrealsense", "serial_number_or_name": "323622271837", "width": 1280, "height": 720, "fps": 30, "use_depth": true}
+  }' \
+  --teleop.type=bi_yam_leader \
+  --teleop.left_arm_port=5002 \
+  --teleop.right_arm_port=5001 \
+  --dataset.repo_id="${HF_USER}/bimanual-yam-depth-demo" \
+  --dataset.num_episodes=10 \
+  --dataset.reset_time_s=25 \
+  --dataset.single_task="Pick and place the object" \
+  --dataset.streaming_encoding=true \
+  --dataset.encoder_threads=2 \
+  --display_data=true \
+  --depth_cams='[top, left, right]'
+```
+
+Recorded features will include the usual `observation.images.{cam}` (RGB) **plus**
+`observation.images.{cam}_depth` (uint16 mm → float32 m at read time) for every
+camera listed in `--depth_cams`.
+
+**Tuning depth range / codec** — edit `src/lerobot/scripts/lerobot_record_with_depth.py`:
+
+- `MIN_DEPTH_M` / `MAX_DEPTH_M` — depth clamp range (defaults: 0.10 m – 3.00 m).
+  Narrow this to the actual working volume for better precision; values outside
+  are clamped before quantization.
+- `DEPTH_CODEC` / `DEPTH_PIX_FMT` / `DEPTH_CRF` — codec knobs. Default
+  `libsvtav1 / yuv420p10le / crf=0` is lossless given the 10-bit quantization.
 
 ### Configuration Parameters
 
