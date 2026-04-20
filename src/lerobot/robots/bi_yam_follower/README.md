@@ -320,8 +320,14 @@ lerobot-teleoperate-with-depth \
   --teleop.right_arm_port=5001 \
   --display_data=true \
   --fps=30 \
-  --depth_cams='[top, left, right]'
+  --depth_cams='[top, left, right]' \
+  --min_depth_m=0.10 \
+  --max_depth_m=1.00
 ```
+
+The `--min_depth_m` / `--max_depth_m` flags behave the same as in
+`lerobot-record-with-depth` — narrow to your working volume for tighter
+precision. Recommended values match what you plan to record with.
 
 Useful for:
 
@@ -469,18 +475,53 @@ lerobot-record-with-depth \
   --dataset.streaming_encoding=true \
   --dataset.encoder_threads=2 \
   --display_data=true \
-  --depth_cams='[top, left, right]'
+  --depth_cams='[top, left, right]' \
+  --min_depth_m=0.10 \
+  --max_depth_m=1.00
 ```
 
 Recorded features will include the usual `observation.images.{cam}` (RGB) **plus**
 `observation.images.{cam}_depth` (uint16 mm → float32 m at read time) for every
 camera listed in `--depth_cams`.
 
-**Tuning depth range / codec** — edit `src/lerobot/scripts/lerobot_record_with_depth.py`:
+**Tuning depth range (close-range tasks)**
 
-- `MIN_DEPTH_M` / `MAX_DEPTH_M` — depth clamp range (defaults: 0.10 m – 3.00 m).
-  Narrow this to the actual working volume for better precision; values outside
-  are clamped before quantization.
+The depth range controls both the hardware clamp and the log-quantization
+scale. Log-scale quantization puts more bits near the close range, so
+**narrowing the range gives substantially tighter precision.**
+
+| Flag              | Default | When to change                                                                         |
+| ----------------- | ------- | -------------------------------------------------------------------------------------- |
+| `--min_depth_m`   | `0.10`  | Raise if your closest object is always > some value (rare).                            |
+| `--max_depth_m`   | `3.00`  | **Lower for close-range manipulation.** For tabletop tasks use `1.00` or even `0.60`. |
+
+For example, a tabletop pick-and-place task with objects at 0.2–0.8 m:
+
+```bash
+--min_depth_m=0.10 --max_depth_m=1.00
+```
+
+cuts the worst-case quantization error roughly 3× vs the default.
+
+The chosen range is stored in each depth feature's info dict as
+`video.depth_min_m` / `video.depth_max_m` / `video.depth_q_bits` so the
+dataset is self-documenting. When loading the dataset later, align your
+decoder to the stored range:
+
+```python
+from lerobot.datasets import LeRobotDataset
+from lerobot.scripts.lerobot_record_with_depth import (
+    encode_depth, decode_depth, set_depth_range,
+)
+ds = LeRobotDataset(..., depth_map_encoding_fn=encode_depth,
+                         depth_map_decoding_fn=decode_depth)
+info = ds.meta.features["observation.images.top_depth"]["info"]
+set_depth_range(info["video.depth_min_m"], info["video.depth_max_m"])
+# … now ds[i]["observation.images.top_depth"] decodes correctly in meters.
+```
+
+**Tuning codec** — edit `src/lerobot/scripts/lerobot_record_with_depth.py`:
+
 - `DEPTH_CODEC` / `DEPTH_PIX_FMT` / `DEPTH_CRF` — codec knobs. Default
   `libsvtav1 / yuv420p10le / crf=0` is lossless given the 10-bit quantization.
 

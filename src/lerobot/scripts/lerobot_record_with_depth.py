@@ -75,17 +75,26 @@ DEPTH_CODEC = "libsvtav1"
 DEPTH_PIX_FMT = "yuv420p10le"
 DEPTH_CRF = 0  # lossless given fixed pix_fmt
 
-# Scene depth range (meters). Adjust to your workspace. Anything outside is
-# clamped; lower values waste precision on background.
-MIN_DEPTH_M = 0.10
-MAX_DEPTH_M = 3.0
-DEPTH_SHIFT = 1.0  # log shift; avoid log(0) and keep dynamic range sensible
+# Default scene depth range (meters). Overridable via --min_depth_m /
+# --max_depth_m. Narrow this to the actual working volume — log-scale
+# quantization puts more bits near the close range, so 0.1–1.0 m gives
+# ~3× tighter per-level precision than 0.1–3.0 m.
+DEFAULT_MIN_DEPTH_M = 0.10
+DEFAULT_MAX_DEPTH_M = 3.0
+DEPTH_SHIFT = 1.0  # log shift; avoids log(0) and keeps dynamic range sensible
 Q_BITS = 10
 Q_MAX = (1 << Q_BITS) - 1
 
+# Module-level state that the encode/decode functions close over. Set by
+# `make_depth_codec(...)` or the wrapper's `_inject_depth_pipeline(...)`.
+# For simplicity (single source of truth) we treat these as module globals
+# rather than threading them through every call.
+MIN_DEPTH_M = DEFAULT_MIN_DEPTH_M
+MAX_DEPTH_M = DEFAULT_MAX_DEPTH_M
+
 
 # ────────────────────────────────────────────────────────────────
-# Depth encode / decode (12-bit log-quantize ↔ yuv420p12le)
+# Depth encode / decode (10-bit log-quantize ↔ yuv420p10le)
 # ────────────────────────────────────────────────────────────────
 def _log_bounds() -> tuple[float, float]:
     return math.log(MIN_DEPTH_M + DEPTH_SHIFT), math.log(MAX_DEPTH_M + DEPTH_SHIFT)
@@ -105,11 +114,31 @@ def _dequantize_depth_m(q: torch.Tensor) -> torch.Tensor:
     return torch.clamp(torch.exp(log_depth) - DEPTH_SHIFT, MIN_DEPTH_M, MAX_DEPTH_M)
 
 
-def encode_depth(depth: np.ndarray) -> av.VideoFrame:
-    """RealSense-style uint16 mm (or float meters) depth → yuv420p12le frame.
+def set_depth_range(min_m: float, max_m: float) -> None:
+    """Set the active depth range used by `encode_depth` / `decode_depth`.
 
-    Accepted shapes: (H, W), (H, W, 1). Y plane carries the 12-bit log-
-    quantized depth; chroma is set to neutral (2^11).
+    Must be called before `LeRobotDataset.create(...)` at record time AND
+    before `LeRobotDataset(...)` at read time — the range is NOT stored
+    inside the mp4, only inside the dataset's feature info dict (see
+    `video.depth_min_m` / `video.depth_max_m` stamped by the wrapper).
+    """
+    global MIN_DEPTH_M, MAX_DEPTH_M
+    if not (0.0 < min_m < max_m):
+        raise ValueError(
+            f"Invalid depth range: min={min_m}, max={max_m}. Must satisfy 0 < min < max."
+        )
+    MIN_DEPTH_M = float(min_m)
+    MAX_DEPTH_M = float(max_m)
+    logger.info("Depth range set to [%.3f, %.3f] m", MIN_DEPTH_M, MAX_DEPTH_M)
+
+
+def encode_depth(depth: np.ndarray) -> av.VideoFrame:
+    """RealSense-style uint16 mm (or float meters) depth → yuv420p10le frame.
+
+    Accepted shapes: (H, W), (H, W, 1). Y plane carries the 10-bit log-
+    quantized depth; chroma is set to neutral (2^9). Range is read from
+    module globals MIN_DEPTH_M / MAX_DEPTH_M — use `set_depth_range(...)`
+    to override before recording or loading.
     """
     if depth.ndim == 3:
         depth = depth[..., 0]
@@ -179,8 +208,25 @@ def _attach_depth_capability(robot, depth_cams: list[str]):
 
     def get_observation_with_depth(*args, **kwargs):
         obs = original_get_observation(*args, **kwargs)
+        # Clip raw RealSense mm depth to the active range. Matches the
+        # clipping the encoder applies in _quantize_depth_m, so what you
+        # see in the teleop Rerun preview is exactly what gets recorded.
+        # Without this, rerun would render the raw sensor output and the
+        # --min/max_depth_m flags would appear to have no effect in the
+        # live display.
+        # RealSense uses 0 as an "invalid/no-depth" sentinel; preserve it
+        # rather than clipping up to min_mm (which would fabricate a fake
+        # wall at the close-range floor).
+        min_mm = int(MIN_DEPTH_M * 1000)
+        max_mm = int(MAX_DEPTH_M * 1000)
         for cam in depth_cams:
-            depth = robot.cameras[cam].read_depth()
+            depth = robot.cameras[cam].read_depth()  # uint16 mm
+            valid = depth > 0
+            depth = np.where(
+                valid,
+                np.clip(depth, min_mm, max_mm),
+                0,  # keep invalid sentinel
+            ).astype(np.uint16)
             if depth.ndim == 2:
                 depth = depth[..., None]  # (H, W) → (H, W, 1) for shape consistency
             obs[f"{cam}_depth"] = depth
@@ -217,7 +263,13 @@ def _attach_depth_capability(robot, depth_cams: list[str]):
 # Feature + dataset patching
 # ────────────────────────────────────────────────────────────────
 def _mark_depth_features(features: dict, depth_cams: list[str]) -> dict:
-    """Stamp video.is_depth_map=True onto every matching depth feature."""
+    """Stamp video.is_depth_map=True onto every matching depth feature.
+
+    Also persists the active MIN_DEPTH_M / MAX_DEPTH_M range into the info
+    dict under `video.depth_min_m` / `video.depth_max_m` so that datasets
+    are self-documenting — the range is otherwise NOT recoverable from the
+    encoded mp4 (the quantization is applied pre-encode).
+    """
     depth_suffixes = {f"{cam}_depth" for cam in depth_cams}
     out = {}
     for key, spec in features.items():
@@ -229,6 +281,9 @@ def _mark_depth_features(features: dict, depth_cams: list[str]) -> dict:
             info.setdefault("video.codec", DEPTH_CODEC)
             info.setdefault("video.pix_fmt", DEPTH_PIX_FMT)
             info.setdefault("video.crf", DEPTH_CRF)
+            info.setdefault("video.depth_min_m", MIN_DEPTH_M)
+            info.setdefault("video.depth_max_m", MAX_DEPTH_M)
+            info.setdefault("video.depth_q_bits", Q_BITS)
             out[key] = {**spec, "info": info}
         else:
             out[key] = spec
@@ -291,6 +346,13 @@ class DepthRecordConfig(RecordConfig):
     # Cameras to ALSO capture depth from. Each must be configured with
     # use_depth=True (e.g. RealSenseCameraConfig).
     depth_cams: list[str] = field(default_factory=list)
+    # Closest depth to preserve (meters). Values < this get clamped.
+    min_depth_m: float = DEFAULT_MIN_DEPTH_M
+    # Farthest depth to preserve (meters). Values > this get clamped.
+    # For close-range manipulation tasks (0.1–1.0 m) set this ~1.0 m —
+    # log-scale quantization puts more bits near the close range, so
+    # narrowing gives substantially tighter per-level precision.
+    max_depth_m: float = DEFAULT_MAX_DEPTH_M
 
 
 @parser.wrap()
@@ -304,6 +366,7 @@ def main(cfg: DepthRecordConfig) -> LeRobotDataset:
         )
         return _record_impl(cfg)
 
+    set_depth_range(cfg.min_depth_m, cfg.max_depth_m)
     with _patch_robot_factory(cfg.depth_cams), _inject_depth_pipeline(cfg.depth_cams):
         return _record_impl(cfg)
 

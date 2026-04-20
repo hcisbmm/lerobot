@@ -40,7 +40,12 @@ from lerobot.scripts.lerobot_teleoperate import TeleoperateConfig, teleoperate
 
 # Reuse the depth-attach helper from the record wrapper so there's one source
 # of truth for how depth streams are wired into a Robot instance.
-from lerobot.scripts.lerobot_record_with_depth import _attach_depth_capability
+from lerobot.scripts.lerobot_record_with_depth import (
+    DEFAULT_MAX_DEPTH_M,
+    DEFAULT_MIN_DEPTH_M,
+    _attach_depth_capability,
+    set_depth_range,
+)
 from lerobot.utils.utils import init_logging
 
 logger = logging.getLogger(__name__)
@@ -75,6 +80,13 @@ class DepthTeleoperateConfig(TeleoperateConfig):
     # Cameras to ALSO capture depth from. Each must be configured with
     # use_depth=True (e.g. RealSenseCameraConfig).
     depth_cams: list[str] = field(default_factory=list)
+    # Closest / farthest depth to preserve (meters). Narrow this to the
+    # working volume — log-scale quantization puts more bits near the
+    # close range, so for 0.1–1.0 m manipulation tasks set max_depth_m
+    # ~1.0 m for ~3× tighter per-level precision vs the 0.1–3.0 m default.
+    # Values outside [min_depth_m, max_depth_m] are clamped at encode time.
+    min_depth_m: float = DEFAULT_MIN_DEPTH_M
+    max_depth_m: float = DEFAULT_MAX_DEPTH_M
 
 
 @parser.wrap()
@@ -88,6 +100,7 @@ def main(cfg: DepthTeleoperateConfig):
         )
         return _teleoperate_impl(cfg)
 
+    set_depth_range(cfg.min_depth_m, cfg.max_depth_m)
     with _patch_robot_factory(cfg.depth_cams):
         return _teleoperate_impl(cfg)
 
