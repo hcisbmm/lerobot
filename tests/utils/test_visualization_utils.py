@@ -232,3 +232,98 @@ def test_log_rerun_data_kwargs_only(mock_rerun):
     a = _obj_for(calls, "action.a")
     assert type(a).__name__ == "DummyScalar"
     assert a.value == pytest.approx(1.0)
+
+
+# ---------------------------------------------------------------------------
+# Shared obs-parsing helpers (used by TorqueVisualizer + MujocoTorqueVisualizer)
+# ---------------------------------------------------------------------------
+
+
+def test_parse_effort_key_joints():
+    from lerobot.utils.visualization_utils import parse_effort_key
+
+    assert parse_effort_key("left_joint_0.eff") == ("left", "joint_0")
+    assert parse_effort_key("left_joint_5.eff") == ("left", "joint_5")
+    assert parse_effort_key("right_joint_0.eff") == ("right", "joint_0")
+    assert parse_effort_key("right_joint_5.eff") == ("right", "joint_5")
+
+
+def test_parse_effort_key_grippers():
+    from lerobot.utils.visualization_utils import parse_effort_key
+
+    assert parse_effort_key("left_gripper.eff") == ("left", "gripper")
+    assert parse_effort_key("right_gripper.eff") == ("right", "gripper")
+
+
+def test_parse_effort_key_accepts_pos_suffix():
+    from lerobot.utils.visualization_utils import parse_effort_key
+
+    assert parse_effort_key("left_joint_2.pos") == ("left", "joint_2")
+    assert parse_effort_key("right_gripper.pos") == ("right", "gripper")
+
+
+def test_parse_effort_key_rejects_malformed():
+    from lerobot.utils.visualization_utils import parse_effort_key
+
+    assert parse_effort_key("no_dot_at_all") is None
+    assert parse_effort_key("unknown_arm_joint_0.eff") is None
+    assert parse_effort_key("left_gripperextra.eff") is None
+    assert parse_effort_key("left_joint_x.eff") is None
+    assert parse_effort_key(".eff") is None
+
+
+def test_is_gripper_key():
+    from lerobot.utils.visualization_utils import is_gripper_key
+
+    assert is_gripper_key("left_gripper.eff") is True
+    assert is_gripper_key("right_gripper.pos") is True
+    assert is_gripper_key("left_joint_0.eff") is False
+    assert is_gripper_key("right_joint_5.eff") is False
+
+
+def test_extract_ordered_eff_zero_fills_missing():
+    from lerobot.utils.visualization_utils import BI_YAM_JOINT_ORDER, extract_ordered
+
+    obs = {
+        "left_joint_0.eff": 1.5,
+        "right_gripper.eff": -0.3,
+    }
+    arr = extract_ordered(obs, "eff")
+    assert arr.shape == (14,)
+    assert arr.dtype == np.float64
+    assert arr[BI_YAM_JOINT_ORDER.index("left_joint_0")] == pytest.approx(1.5)
+    assert arr[BI_YAM_JOINT_ORDER.index("right_gripper")] == pytest.approx(-0.3)
+    assert arr[BI_YAM_JOINT_ORDER.index("left_joint_1")] == 0.0
+
+
+def test_extract_ordered_pos_same_interface():
+    from lerobot.utils.visualization_utils import extract_ordered
+
+    obs = {f"left_joint_{i}.pos": float(i) for i in range(6)}
+    obs["left_gripper.pos"] = 0.05
+    arr = extract_ordered(obs, "pos")
+    assert arr[0:6].tolist() == [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
+    assert arr[6] == pytest.approx(0.05)
+    assert (arr[7:] == 0.0).all()
+
+
+def test_torque_visualizer_uses_shared_helpers():
+    from lerobot.utils.visualization_utils import TorqueVisualizer
+
+    obs = {
+        "left_joint_0.eff": 0.5,
+        "left_gripper.eff": 0.1,
+        "right_joint_3.eff": -0.2,
+        "right_gripper.eff": 0.3,
+        "left_joint_0.pos": 1.0,  # non-eff, must be filtered out
+    }
+
+    viz_full = TorqueVisualizer(ee_only=False)
+    eff_full = viz_full._filter_eff_keys(obs)
+    assert set(eff_full.keys()) == {
+        "left_joint_0.eff", "left_gripper.eff", "right_joint_3.eff", "right_gripper.eff"
+    }
+
+    viz_ee = TorqueVisualizer(ee_only=True)
+    eff_ee = viz_ee._filter_eff_keys(obs)
+    assert set(eff_ee.keys()) == {"left_gripper.eff", "right_gripper.eff"}

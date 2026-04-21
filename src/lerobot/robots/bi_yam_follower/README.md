@@ -196,6 +196,49 @@ lerobot-teleoperate \
   --record_effort=true
 ```
 
+#### With Live 3D MuJoCo Torque + EE-Force Visualizer
+
+Opens a MuJoCo viewer window with the two YAM arms mirroring the follower's
+live pose. Draws an arrow along each joint axis sized and colored by the
+measured joint torque (red = positive, blue = negative), and overlays a green
+arrow at each gripper site representing the estimated end-effector force
+(`F_ee ≈ pinv(J^T) · (τ_meas − g(q))`). With gravity compensation on
+(default), the force arrows should be near-zero when the arm is held still
+under gravity alone and should point along the direction of any external
+push.
+
+```bash
+lerobot-teleoperate \
+  --robot.type=bi_yam_follower \
+  --robot.left_arm_port=1235 \
+  --robot.right_arm_port=1234 \
+  --teleop.type=bi_yam_leader \
+  --teleop.left_arm_port=5002 \
+  --teleop.right_arm_port=5001 \
+  --display_data=true \
+  --show_mujoco_torque=true
+```
+
+Useful flags (defaults shown):
+
+- `--show_mujoco_torque=true` — enable the 3D viewer.
+- `--mujoco_gripper_type=linear_4310` — gripper MJCF variant used to compose
+  the scene. Change if your follower uses a different i2rt gripper.
+- `--mujoco_show_ee_force=true` — overlay per-gripper force arrows.
+- `--mujoco_compensate_gravity=true` — subtract `g(q)` before the Jacobian
+  inversion. Set to `false` for a raw-vs-compensated sanity check.
+- `--mujoco_arrow_scale=0.05` — metres per Nm for joint-torque arrows.
+- `--mujoco_force_arrow_scale=0.01` — metres per Newton for EE-force arrows.
+- `--mujoco_max_ee_force=50.0` — clamp on `|F_ee|` (Newtons) to keep the
+  overlay readable near arm singularities.
+
+Physics caveats: `.eff` is already in N·m from the DM-motor firmware (no K_t
+conversion in our code), so readings reflect motor-side friction but not
+cable/joint-side friction. The EE force is a quasi-static estimate;
+unmodeled dynamics and a mismatch between the real arm's end-effector mass
+and the MJCF mass will leak into the arrow. Near arm singularities the
+pseudoinverse blows up — `--mujoco_max_ee_force` clamps it.
+
 #### Step 2.2: Find Camera
 
 Identify available cameras on your system:

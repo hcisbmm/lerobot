@@ -106,6 +106,7 @@ from lerobot.utils.import_utils import register_third_party_plugins
 from lerobot.utils.robot_utils import precise_sleep
 from lerobot.utils.utils import init_logging, move_cursor_up
 from lerobot.utils.visualization_utils import (
+    MujocoTorqueVisualizer,
     TorqueVisualizer,
     init_rerun,
     log_rerun_data,
@@ -135,6 +136,20 @@ class TeleoperateConfig:
     show_torque_ee_only: bool = False
     # Include joint effort/torque data in observations (for Rerun display)
     record_effort: bool = False
+    # Show live 3D MuJoCo visualization of joint torques (bi_yam_follower only)
+    show_mujoco_torque: bool = False
+    # Gripper model used by the bi_yam_follower (passed to the MuJoCo scene builder)
+    mujoco_gripper_type: str = "linear_4310"
+    # Arrow length per Nm for joint-torque arrows in the MuJoCo viewer
+    mujoco_arrow_scale: float = 0.05
+    # Overlay estimated end-effector force vectors at each gripper site
+    mujoco_show_ee_force: bool = True
+    # Arrow length per Newton for EE-force arrows
+    mujoco_force_arrow_scale: float = 0.01
+    # Subtract g(q) from measured torques before the Jacobian inversion
+    mujoco_compensate_gravity: bool = True
+    # Clamp |F_ee| to avoid overlay blow-up near arm singularities
+    mujoco_max_ee_force: float = 50.0
 
 
 def teleop_loop(
@@ -148,6 +163,7 @@ def teleop_loop(
     duration: float | None = None,
     display_compressed_images: bool = False,
     torque_visualizer: TorqueVisualizer | None = None,
+    mujoco_torque_visualizer: MujocoTorqueVisualizer | None = None,
     record_effort: bool = False,
 ):
     """
@@ -178,6 +194,12 @@ def teleop_loop(
         # given that it is the identity processor as default
         obs = robot.get_observation()
 
+        # Preserve a pre-filter snapshot so visualizers always see .eff, even when
+        # record_effort=False strips them from the downstream pipeline obs.
+        obs_for_viz: dict | None = None
+        if torque_visualizer is not None or mujoco_torque_visualizer is not None:
+            obs_for_viz = dict(obs)
+
         # Strip .eff keys when effort recording is disabled
         if not record_effort:
             obs = {k: v for k, v in obs.items() if not k.endswith(".eff")}
@@ -198,7 +220,9 @@ def teleop_loop(
         _ = robot.send_action(robot_action_to_send)
 
         if torque_visualizer is not None:
-            torque_visualizer.update(obs)
+            torque_visualizer.update(obs_for_viz)
+        if mujoco_torque_visualizer is not None:
+            mujoco_torque_visualizer.update(obs_for_viz)
 
         if display_data:
             # Process robot observation through pipeline
@@ -250,6 +274,17 @@ def teleoperate(cfg: TeleoperateConfig):
     if cfg.show_torque:
         torque_viz = TorqueVisualizer(ee_only=cfg.show_torque_ee_only)
 
+    mujoco_torque_viz = None
+    if cfg.show_mujoco_torque:
+        mujoco_torque_viz = MujocoTorqueVisualizer(
+            gripper_type=cfg.mujoco_gripper_type,
+            arrow_scale=cfg.mujoco_arrow_scale,
+            show_ee_force=cfg.mujoco_show_ee_force,
+            force_arrow_scale=cfg.mujoco_force_arrow_scale,
+            compensate_gravity=cfg.mujoco_compensate_gravity,
+            max_ee_force=cfg.mujoco_max_ee_force,
+        )
+
     try:
         teleop_loop(
             teleop=teleop,
@@ -262,6 +297,7 @@ def teleoperate(cfg: TeleoperateConfig):
             robot_observation_processor=robot_observation_processor,
             display_compressed_images=display_compressed_images,
             torque_visualizer=torque_viz,
+            mujoco_torque_visualizer=mujoco_torque_viz,
             record_effort=cfg.record_effort,
         )
     except KeyboardInterrupt:
@@ -269,6 +305,8 @@ def teleoperate(cfg: TeleoperateConfig):
     finally:
         if torque_viz is not None:
             torque_viz.close()
+        if mujoco_torque_viz is not None:
+            mujoco_torque_viz.close()
         if cfg.display_data:
             shutdown_rerun()
         teleop.disconnect()

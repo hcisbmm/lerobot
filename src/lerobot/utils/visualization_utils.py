@@ -131,6 +131,62 @@ def log_rerun_data(
                         rr.log(f"{key}_{i}", rr.Scalars(float(vi)))
 
 
+# ---------------------------------------------------------------------------
+# Shared helpers for bimanual YAM (.eff / .pos) observation parsing
+# Used by TorqueVisualizer (2D matplotlib) and MujocoTorqueVisualizer (3D).
+# ---------------------------------------------------------------------------
+
+BI_YAM_JOINT_ORDER: list[str] = [
+    "left_joint_0", "left_joint_1", "left_joint_2",
+    "left_joint_3", "left_joint_4", "left_joint_5", "left_gripper",
+    "right_joint_0", "right_joint_1", "right_joint_2",
+    "right_joint_3", "right_joint_4", "right_joint_5", "right_gripper",
+]  # canonical 14-DoF order (matches bi_yam_follower observation schema)
+
+
+def parse_effort_key(key: str) -> tuple[str, str] | None:
+    """Parse a bi_yam effort/position key into (arm_side, part_name).
+
+    Returns ('left', 'joint_0') for 'left_joint_0.eff', ('right', 'gripper')
+    for 'right_gripper.eff', and None for anything that doesn't fit the pattern.
+    Works for both '.eff' and '.pos' suffixes.
+    """
+    if "." not in key:
+        return None
+    base, _, _ = key.rpartition(".")
+    for arm in ("left", "right"):
+        prefix = f"{arm}_"
+        if base.startswith(prefix):
+            part = base[len(prefix):]
+            if part == "gripper":
+                return arm, part
+            if part.startswith("joint_") and part[len("joint_"):].isdigit():
+                return arm, part
+    return None
+
+
+def is_gripper_key(key: str) -> bool:
+    """True for gripper-related effort/position keys (used for EE-only filtering)."""
+    return "gripper" in key
+
+
+def extract_ordered(
+    obs: dict,
+    suffix: str,
+    joint_order: list[str] = BI_YAM_JOINT_ORDER,
+) -> np.ndarray:
+    """Pull scalars from obs into a fixed-length float64 ndarray aligned to joint_order.
+
+    Reads obs[f'{name}.{suffix}'] for each name; missing keys zero-fill. Used by both
+    visualizers to get stable arrays for .pos (MuJoCo qpos mirroring) and .eff (arrow
+    rendering) regardless of dict iteration order or missing hardware values.
+    """
+    return np.array(
+        [float(obs.get(f"{name}.{suffix}", 0.0)) for name in joint_order],
+        dtype=np.float64,
+    )
+
+
 class TorqueVisualizer:
     """Real-time rolling torque plot for robot arms using matplotlib.
 
@@ -166,17 +222,11 @@ class TorqueVisualizer:
 
         sorted_keys = sorted(eff_keys)
         for idx, key in enumerate(sorted_keys):
-            # Parse arm side and joint index from key like "left_joint_0.eff" or "right_gripper.eff"
-            parts = key.replace(".eff", "")
-            if parts.startswith("left_"):
-                arm = "left"
-                remainder = parts[len("left_"):]
-            elif parts.startswith("right_"):
-                arm = "right"
-                remainder = parts[len("right_"):]
+            parsed = parse_effort_key(key)
+            if parsed is None:
+                arm, remainder = "unknown", key
             else:
-                arm = "unknown"
-                remainder = parts
+                arm, remainder = parsed
 
             if remainder == "gripper":
                 joint_idx = 6
@@ -226,7 +276,7 @@ class TorqueVisualizer:
         for k, v in obs.items():
             if not k.endswith(".eff"):
                 continue
-            if self.ee_only and "gripper" not in k:
+            if self.ee_only and not is_gripper_key(k):
                 continue
             eff_data[k] = float(v)
         return eff_data
@@ -286,3 +336,257 @@ class TorqueVisualizer:
 
             plt.close(self._fig)
             self._fig = None
+
+
+# ---------------------------------------------------------------------------
+# MujocoTorqueVisualizer — 3D live torque + EE-force visualization
+# ---------------------------------------------------------------------------
+
+
+# Map each bi_yam observation key (14 DoFs) to its MuJoCo joint name in the
+# bimanual scene composed by mujoco_scene_builder. Gripper obs maps to joint7;
+# joint8 is coupled via equality and mirrored manually during state sync.
+_OBS_TO_MJ_JOINT: dict[str, str] = {
+    "left_joint_0": "left_joint1",
+    "left_joint_1": "left_joint2",
+    "left_joint_2": "left_joint3",
+    "left_joint_3": "left_joint4",
+    "left_joint_4": "left_joint5",
+    "left_joint_5": "left_joint6",
+    "left_gripper":  "left_joint7",
+    "right_joint_0": "right_joint1",
+    "right_joint_1": "right_joint2",
+    "right_joint_2": "right_joint3",
+    "right_joint_3": "right_joint4",
+    "right_joint_4": "right_joint5",
+    "right_joint_5": "right_joint6",
+    "right_gripper": "right_joint7",
+}
+_GRIPPER_MIRRORS: list[tuple[str, str]] = [
+    ("left_joint7", "left_joint8"),
+    ("right_joint7", "right_joint8"),
+]
+_LEFT_ARM_OBS = [f"left_joint_{i}" for i in range(6)]
+_RIGHT_ARM_OBS = [f"right_joint_{i}" for i in range(6)]
+
+
+class MujocoTorqueVisualizer:
+    """Live 3D torque + EE-force visualization for the bi_yam_follower robot.
+
+    Mirrors the robot's joint positions into a bimanual YAM MuJoCo scene,
+    draws an arrow along each joint axis sized and colored by the measured
+    torque (from the robot's .eff observation keys), and optionally overlays
+    an estimated end-effector force vector at each gripper site using the
+    Jacobian pseudoinverse relation ``F_ee = pinv(J^T)(τ_meas − g(q))``.
+
+    Lifecycle mirrors :class:`TorqueVisualizer`: construct once, call
+    :meth:`update` every control-loop iteration with the full observation
+    dict, and :meth:`close` on shutdown. The viewer sync is throttled to
+    ``target_fps`` so a 60 Hz teleop loop doesn't stall on rendering.
+
+    Physics caveats:
+    - ``.eff`` is N·m direct from the motor firmware (DM MIT-mode CAN
+      feedback). No K_t conversion is done in this code. The estimate
+      captures motor-side friction but not cable/joint-side friction.
+    - The EE force is a quasi-static estimate. Unmodeled dynamics
+      (M·q̈ + C·q̇) and friction leak into the result; at teleop speeds
+      this is small but not zero. Gravity compensation uses MuJoCo's
+      inverse-dynamics on the supplied MJCF — if the real arm carries a
+      custom end-effector mass not reflected in the model, the estimate
+      is off by that amount.
+    - Near arm singularities, the pseudoinverse gain blows up. Magnitudes
+      are clamped to ``max_ee_force`` to keep the overlay readable.
+    """
+
+    _POS_COLOR = np.array([0.85, 0.15, 0.15, 0.9], dtype=np.float32)
+    _NEG_COLOR = np.array([0.15, 0.25, 0.85, 0.9], dtype=np.float32)
+    _FORCE_COLOR = np.array([0.10, 0.75, 0.25, 0.9], dtype=np.float32)
+
+    def __init__(
+        self,
+        gripper_type: str = "linear_4310",
+        arrow_scale: float = 0.05,
+        arrow_width: float = 0.005,
+        force_arrow_scale: float = 0.01,
+        force_arrow_width: float = 0.008,
+        show_ee_force: bool = True,
+        compensate_gravity: bool = True,
+        max_ee_force: float = 50.0,
+        left_base_offset: tuple[float, float, float] = (0.0, 0.25, 0.0),
+        right_base_offset: tuple[float, float, float] = (0.0, -0.25, 0.0),
+        target_fps: float = 30.0,
+    ) -> None:
+        require_package("mujoco", extra="yam")
+
+        import mujoco
+        import mujoco.viewer
+
+        from lerobot.utils.mujoco_scene_builder import build_bimanual_yam_scene
+
+        self.arrow_scale = float(arrow_scale)
+        self.arrow_width = float(arrow_width)
+        self.force_arrow_scale = float(force_arrow_scale)
+        self.force_arrow_width = float(force_arrow_width)
+        self.show_ee_force = bool(show_ee_force)
+        self.compensate_gravity = bool(compensate_gravity)
+        self.max_ee_force = float(max_ee_force)
+        self.target_fps = float(target_fps)
+
+        xml = build_bimanual_yam_scene(
+            gripper_type=gripper_type,
+            left_base_offset=left_base_offset,
+            right_base_offset=right_base_offset,
+        )
+        self._mj = mujoco
+        self._model = mujoco.MjModel.from_xml_string(xml)
+        self._data = mujoco.MjData(self._model)
+
+        self._joint_ids: dict[str, int] = {
+            obs_key: self._model.joint(mj_name).id
+            for obs_key, mj_name in _OBS_TO_MJ_JOINT.items()
+        }
+        self._joint_qposadr: dict[str, int] = {
+            obs_key: int(self._model.jnt_qposadr[self._joint_ids[obs_key]])
+            for obs_key in _OBS_TO_MJ_JOINT
+        }
+        self._mirror_qposadr: list[tuple[int, int]] = [
+            (
+                int(self._model.jnt_qposadr[self._model.joint(master).id]),
+                int(self._model.jnt_qposadr[self._model.joint(slave).id]),
+            )
+            for master, slave in _GRIPPER_MIRRORS
+        ]
+        self._left_arm_dofadr = np.array(
+            [int(self._model.jnt_dofadr[self._model.joint(f"left_joint{i}").id]) for i in range(1, 7)],
+            dtype=np.int32,
+        )
+        self._right_arm_dofadr = np.array(
+            [int(self._model.jnt_dofadr[self._model.joint(f"right_joint{i}").id]) for i in range(1, 7)],
+            dtype=np.int32,
+        )
+        self._left_grasp_site_id = int(self._model.site("left_grasp_site").id)
+        self._right_grasp_site_id = int(self._model.site("right_grasp_site").id)
+
+        self._viewer = mujoco.viewer.launch_passive(self._model, self._data)
+        self._closed = False
+        self._last_redraw = 0.0
+
+    def update(self, obs: dict) -> None:
+        """Mirror joint positions into MuJoCo and redraw arrows. Throttled to ``target_fps``."""
+        if self._closed or obs is None:
+            return
+
+        now = time.monotonic()
+        if now - self._last_redraw < 1.0 / self.target_fps:
+            return
+        self._last_redraw = now
+
+        self._mirror_qpos(obs)
+        self._mj.mj_forward(self._model, self._data)
+
+        torques = extract_ordered(obs, "eff")
+        self._update_user_scn(obs, torques)
+
+        self._viewer.sync()
+
+    def close(self) -> None:
+        """Close the viewer. Idempotent."""
+        if self._closed:
+            return
+        self._closed = True
+        try:
+            self._viewer.close()
+        except Exception:
+            pass
+
+    def _mirror_qpos(self, obs: dict) -> None:
+        for obs_key, qposadr in self._joint_qposadr.items():
+            val = obs.get(f"{obs_key}.pos")
+            if val is not None:
+                self._data.qpos[qposadr] = float(val)
+        for master_adr, slave_adr in self._mirror_qposadr:
+            self._data.qpos[slave_adr] = self._data.qpos[master_adr]
+
+    def _update_user_scn(self, obs: dict, torques: np.ndarray) -> None:
+        scn = self._viewer.user_scn
+        scn.ngeom = 0
+
+        for i, obs_key in enumerate(BI_YAM_JOINT_ORDER):
+            tau = float(torques[i])
+            if abs(tau) < 1e-6:
+                continue
+            jnt_id = self._joint_ids[obs_key]
+            anchor = np.asarray(self._data.xanchor[jnt_id], dtype=np.float64)
+            axis = np.asarray(self._data.xaxis[jnt_id], dtype=np.float64)
+            length = self.arrow_scale * abs(tau)
+            direction = axis * (1.0 if tau > 0 else -1.0)
+            to_pt = anchor + direction * length
+            color = self._POS_COLOR if tau > 0 else self._NEG_COLOR
+            self._add_arrow(scn, anchor, to_pt, self.arrow_width, color)
+
+        if self.show_ee_force:
+            g = self._compute_gravity() if self.compensate_gravity else None
+            for side, arm_keys, site_id, dofadr in (
+                ("left", _LEFT_ARM_OBS, self._left_grasp_site_id, self._left_arm_dofadr),
+                ("right", _RIGHT_ARM_OBS, self._right_grasp_site_id, self._right_arm_dofadr),
+            ):
+                F = self._compute_ee_force(arm_keys, dofadr, site_id, obs, g)
+                if F is None:
+                    continue
+                site_pos = np.asarray(self._data.site_xpos[site_id], dtype=np.float64)
+                mag = float(np.linalg.norm(F))
+                if mag < 1e-6:
+                    continue
+                mag_clamped = min(mag, self.max_ee_force)
+                direction = F / mag
+                to_pt = site_pos + direction * (self.force_arrow_scale * mag_clamped)
+                self._add_arrow(scn, site_pos, to_pt, self.force_arrow_width, self._FORCE_COLOR)
+
+    def _add_arrow(self, scn, from_pt, to_pt, width, rgba):
+        if scn.ngeom >= scn.maxgeom:
+            return
+        geom = scn.geoms[scn.ngeom]
+        self._mj.mjv_initGeom(
+            geom,
+            type=self._mj.mjtGeom.mjGEOM_ARROW,
+            size=np.zeros(3, dtype=np.float64),
+            pos=np.zeros(3, dtype=np.float64),
+            mat=np.eye(3, dtype=np.float64).flatten(),
+            rgba=rgba,
+        )
+        self._mj.mjv_connector(
+            geom,
+            type=self._mj.mjtGeom.mjGEOM_ARROW,
+            width=width,
+            from_=from_pt.astype(np.float64),
+            to=to_pt.astype(np.float64),
+        )
+        scn.ngeom += 1
+
+    def _compute_gravity(self) -> np.ndarray:
+        qvel_save = self._data.qvel.copy()
+        qacc_save = self._data.qacc.copy()
+        try:
+            self._data.qvel[:] = 0.0
+            self._data.qacc[:] = 0.0
+            self._mj.mj_inverse(self._model, self._data)
+            return self._data.qfrc_inverse.copy()
+        finally:
+            self._data.qvel[:] = qvel_save
+            self._data.qacc[:] = qacc_save
+
+    def _compute_ee_force(self, arm_keys, dofadr, site_id, obs, gravity):
+        tau = np.array([float(obs.get(f"{k}.eff", 0.0)) for k in arm_keys], dtype=np.float64)
+        if gravity is not None:
+            tau = tau - gravity[dofadr]
+        if not np.any(np.abs(tau) > 1e-9):
+            return None
+        jacp = np.zeros((3, self._model.nv), dtype=np.float64)
+        jacr = np.zeros((3, self._model.nv), dtype=np.float64)
+        self._mj.mj_jacSite(self._model, self._data, jacp, jacr, site_id)
+        J = np.vstack([jacp[:, dofadr], jacr[:, dofadr]])
+        try:
+            F = np.linalg.pinv(J.T) @ tau
+        except np.linalg.LinAlgError:
+            return None
+        return F[:3]
