@@ -54,23 +54,23 @@ class BiYamFollowerConfig(RobotConfig):
         if self.use_palm_camera:
             palm_cameras: dict[str, CameraConfig] = {
                 "left_palm": OpenCVCameraConfig(
-                    index_or_path="/dev/v4l/by-path/pci-0000:00:14.0-usb-0:6.3.4:1.0-video-index0",
+                    index_or_path="/dev/v4l/by-path/pci-0000:00:14.0-usb-0:6.2.4:1.0-video-index0",
                     fps=self.palm_camera_fps,
-                    width=640,
+                    width=480,
                     height=640,
                     rotation=Cv2Rotation.ROTATE_90,
                     warmup_s=3,
                     fourcc=self.palm_camera_fourcc,
                 ),
-                # "right_palm": OpenCVCameraConfig(
-                #     index_or_path="/dev/v4l/by-path/pci-0000:00:14.0-usb-0:2.4.2.4:1.0-video-index0",
-                #     fps=self.palm_camera_fps,
-                #     width=640,
-                #     height=640,
-                #     rotation=Cv2Rotation.NO_ROTATION,
-                #     warmup_s=3,
-                #     fourcc=self.palm_camera_fourcc,
-                # ),
+                "right_palm": OpenCVCameraConfig(
+                    index_or_path="/dev/v4l/by-path/pci-0000:00:14.0-usb-0:6.3.4:1.0-video-index0",
+                    fps=self.palm_camera_fps,
+                    width=480,
+                    height=640,
+                    rotation=Cv2Rotation.ROTATE_270,
+                    warmup_s=3,
+                    fourcc=self.palm_camera_fourcc,
+                ),
             }
             # Merge: palm cameras as base, explicit --robot.cameras overrides on collision
             palm_cameras.update(self.cameras)

@@ -456,6 +456,18 @@ class MujocoTorqueVisualizer:
             )
             for master, slave in _GRIPPER_MIRRORS
         ]
+        # Gripper obs (e.g. left_gripper.pos) is normalized [0,1] from run_yam_server,
+        # but the MJCF slide joint is in meters. Scale by the joint's physical stroke so
+        # fingers open the correct distance instead of flying meters apart.
+        gripper_masters = {master for master, _ in _GRIPPER_MIRRORS}
+        self._gripper_scale: dict[str, float] = {}
+        for obs_key, mj_name in _OBS_TO_MJ_JOINT.items():
+            if mj_name not in gripper_masters:
+                continue
+            lo, hi = self._model.jnt_range[self._model.joint(mj_name).id]
+            stroke = float(hi - lo)
+            if stroke > 0.0:
+                self._gripper_scale[obs_key] = stroke
         self._left_arm_dofadr = np.array(
             [int(self._model.jnt_dofadr[self._model.joint(f"left_joint{i}").id]) for i in range(1, 7)],
             dtype=np.int32,
@@ -502,8 +514,12 @@ class MujocoTorqueVisualizer:
     def _mirror_qpos(self, obs: dict) -> None:
         for obs_key, qposadr in self._joint_qposadr.items():
             val = obs.get(f"{obs_key}.pos")
-            if val is not None:
-                self._data.qpos[qposadr] = float(val)
+            if val is None:
+                continue
+            scale = self._gripper_scale.get(obs_key)
+            if scale is not None:
+                val = float(val) * scale
+            self._data.qpos[qposadr] = float(val)
         for master_adr, slave_adr in self._mirror_qposadr:
             self._data.qpos[slave_adr] = self._data.qpos[master_adr]
 

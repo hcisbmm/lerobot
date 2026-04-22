@@ -149,10 +149,34 @@ def test_update_mirrors_positions_into_qpos(make_visualizer, patched_viewer_and_
         viz.update(obs)
         for obs_key in BI_YAM_JOINT_ORDER:
             adr = viz._joint_qposadr[obs_key]
-            assert viz._data.qpos[adr] == pytest.approx(positions[obs_key])
+            # Gripper obs is normalized [0,1] and scaled into the slide joint's stroke;
+            # arm joints pass through unchanged.
+            scale = viz._gripper_scale.get(obs_key, 1.0)
+            assert viz._data.qpos[adr] == pytest.approx(positions[obs_key] * scale)
         # Gripper slave joints should mirror their masters (joint7 == joint8).
         for master, slave in viz._mirror_qposadr:
             assert viz._data.qpos[master] == viz._data.qpos[slave]
+    finally:
+        viz.close()
+
+
+def test_gripper_obs_scaled_to_joint_stroke(make_visualizer, patched_viewer_and_geom_api):
+    """Fully-open obs (1.0) must land at the slide joint's upper range, not 1 m."""
+    viz = make_visualizer()
+    try:
+        obs = _full_obs(positions={"left_gripper": 1.0, "right_gripper": 0.0})
+        viz.update(obs)
+        left_id = viz._model.joint("left_joint7").id
+        right_id = viz._model.joint("right_joint7").id
+        left_stroke = float(viz._model.jnt_range[left_id][1] - viz._model.jnt_range[left_id][0])
+        assert viz._data.qpos[viz._joint_qposadr["left_gripper"]] == pytest.approx(left_stroke)
+        assert viz._data.qpos[viz._joint_qposadr["right_gripper"]] == pytest.approx(0.0)
+        # Stroke came from the MJCF and must be positive but far smaller than a meter.
+        assert 0.0 < left_stroke < 0.2
+        assert viz._gripper_scale["left_gripper"] == pytest.approx(left_stroke)
+        assert viz._gripper_scale["right_gripper"] == pytest.approx(
+            float(viz._model.jnt_range[right_id][1] - viz._model.jnt_range[right_id][0])
+        )
     finally:
         viz.close()
 

@@ -15,7 +15,14 @@
 # limitations under the License.
 
 from .configuration_groot import GrootConfig
-from .modeling_groot import GrootPolicy
-from .processor_groot import make_groot_pre_post_processors
+
+try:
+    from .modeling_groot import GrootPolicy
+    from .processor_groot import make_groot_pre_post_processors
+except ImportError:
+    # Groot pulls in `diffusers` (optional); if it's not installed, the config is
+    # still importable but GrootPolicy / make_groot_pre_post_processors are not.
+    # The policy factory fails loudly at instantiation time if users actually pick groot.
+    pass
 
 __all__ = ["GrootConfig", "GrootPolicy", "make_groot_pre_post_processors"]
