@@ -16,6 +16,7 @@
 
 import logging
 import time
+from concurrent.futures import ThreadPoolExecutor
 from functools import cached_property
 from typing import TYPE_CHECKING, Any
 
@@ -133,6 +134,13 @@ class BiYamFollower(Robot):
         self._left_dofs = None
         self._right_dofs = None
 
+        # Parallel camera-read executor. Each RealSense camera has its own
+        # background capture thread + new-frame event, so reading them
+        # sequentially in a single Python thread serializes their next-frame
+        # waits (~33 ms each at 30 FPS) into a sum. A tiny pool lets them
+        # wait concurrently so the total is bounded by max(), not sum().
+        self._cam_executor: ThreadPoolExecutor | None = None
+
     @property
     def _motors_ft(self) -> dict[str, type]:
         """Define motor feature types for both arms."""
@@ -249,6 +257,13 @@ class BiYamFollower(Robot):
         for cam in self.cameras.values():
             cam.connect()
 
+        # Spin up the parallel camera-read pool now that cameras are live.
+        if self.cameras:
+            self._cam_executor = ThreadPoolExecutor(
+                max_workers=len(self.cameras),
+                thread_name_prefix=f"{self.name}-cam",
+            )
+
         logger.info("Successfully connected to bimanual Yam follower robot")
 
     @property
@@ -336,12 +351,20 @@ class BiYamFollower(Robot):
                 obs_dict[key] = 0.0
 
         # Get camera observations only if requested
-        if include_cameras:
-            for cam_key, cam in self.cameras.items():
-                start = time.perf_counter()
-                obs_dict[cam_key] = cam.async_read()
-                dt_ms = (time.perf_counter() - start) * 1e3
-                logger.debug(f"{self} read {cam_key}: {dt_ms:.1f}ms")
+        if include_cameras and self.cameras:
+            start = time.perf_counter()
+            if self._cam_executor is not None:
+                futures = {
+                    key: self._cam_executor.submit(cam.async_read)
+                    for key, cam in self.cameras.items()
+                }
+                for key, fut in futures.items():
+                    obs_dict[key] = fut.result()
+            else:
+                for cam_key, cam in self.cameras.items():
+                    obs_dict[cam_key] = cam.async_read()
+            dt_ms = (time.perf_counter() - start) * 1e3
+            logger.debug(f"{self} read all cameras: {dt_ms:.1f}ms")
 
         return obs_dict
 
@@ -472,6 +495,10 @@ class BiYamFollower(Robot):
 
         self.left_arm.disconnect()
         self.right_arm.disconnect()
+
+        if self._cam_executor is not None:
+            self._cam_executor.shutdown(wait=True)
+            self._cam_executor = None
 
         for cam in self.cameras.values():
             cam.disconnect()
