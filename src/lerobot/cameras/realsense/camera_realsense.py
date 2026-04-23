@@ -538,7 +538,53 @@ class RealSenseCamera(Camera):
             self.latest_timestamp = None
             self.new_frame_event.clear()
 
-    # NOTE(Steven): Missing implementation for depth for now
+    @check_if_not_connected
+    def async_read_depth(self, timeout_ms: float = 200) -> NDArray[Any]:
+        """
+        Reads the latest available depth frame asynchronously.
+
+        This method retrieves the most recent depth frame captured by the background
+        read thread. It does not block waiting for the camera hardware directly,
+        but may wait up to timeout_ms for the background thread to provide a frame.
+        It is “best effort” under high FPS.
+
+        Args:
+            timeout_ms (float): Maximum time in milliseconds to wait for a frame
+                to become available. Defaults to 200ms (0.2 seconds).
+
+        Returns:
+            np.ndarray:
+            The latest captured depth frame (uint16, millimeters), processed according to configuration.
+
+        Raises:
+            DeviceNotConnectedError: If the camera is not connected.
+            TimeoutError: If no frame data becomes available within the specified timeout.
+            RuntimeError: If the depth stream is not enabled, if the background
+                thread died unexpectedly, or if the event fires without a frame available.
+        """
+
+        if not self.use_depth:
+            raise RuntimeError(
+                f"Failed to capture depth frame '.async_read_depth()'. Depth stream is not enabled for {self}."
+            )
+        if self.thread is None or not self.thread.is_alive():
+            raise RuntimeError(f"{self} read thread is not running.")
+
+        if not self.new_frame_event.wait(timeout=timeout_ms / 1000.0):
+            raise TimeoutError(
+                f"Timed out waiting for depth frame from camera {self} after {timeout_ms} ms. "
+                f"Read thread alive: {self.thread.is_alive()}."
+            )
+
+        with self.frame_lock:
+            frame = self.latest_depth_frame
+            self.new_frame_event.clear()
+
+        if frame is None:
+            raise RuntimeError(f"Internal error: Event set but no depth frame available for {self}.")
+
+        return frame
+
     @check_if_not_connected
     def async_read(self, timeout_ms: float = 200) -> NDArray[Any]:
         """
