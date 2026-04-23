@@ -483,6 +483,14 @@ class RealSenseCamera(Camera):
                 if self.use_depth:
                     depth_frame_raw = frame.get_depth_frame()
                     depth_frame = np.asanyarray(depth_frame_raw.get_data())
+                    # Normalize to mm. D435: 1 mm/count; D405: 0.1 mm/count.
+                    depth_scale_mm = depth_frame_raw.get_units() * 1000.0
+                    if abs(depth_scale_mm - 1.0) > 1e-3:
+                        scaled = depth_frame.astype(np.float32) * depth_scale_mm
+                        # Preserve 0 as invalid sentinel; clip guards against any
+                        # future camera shipping with depth_scale > 1 mm/count.
+                        scaled = np.where(depth_frame == 0, 0, scaled)
+                        depth_frame = np.clip(scaled, 0, np.iinfo(np.uint16).max).astype(np.uint16)
                     processed_depth_frame = self._postprocess_image(depth_frame, depth_frame=True)
 
                 capture_time = time.perf_counter()
