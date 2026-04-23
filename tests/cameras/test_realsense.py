@@ -161,6 +161,49 @@ def test_async_read_before_connect():
         _ = camera.async_read()
 
 
+def test_async_read_depth_before_connect():
+    config = RealSenseCameraConfig(serial_number_or_name="042", use_depth=True)
+    camera = RealSenseCamera(config)
+
+    with pytest.raises(DeviceNotConnectedError):
+        _ = camera.async_read_depth()
+
+
+def test_async_read_depth_depth_disabled():
+    config = RealSenseCameraConfig(serial_number_or_name="042", warmup_s=0)
+    with (
+        RealSenseCamera(config) as camera,
+        pytest.raises(RuntimeError, match="Depth stream is not enabled"),
+    ):
+        _ = camera.async_read_depth()
+
+
+# TODO(Steven): Fix this test for the latest version of pyrealsense2.
+@pytest.mark.skip("Skipping test: pyrealsense2 version > 2.55.1.6486")
+def test_async_read_depth():
+    config = RealSenseCameraConfig(serial_number_or_name="042", width=640, height=480, fps=30, use_depth=True)
+    camera = RealSenseCamera(config)
+    camera.connect(warmup=False)
+
+    img = camera.async_read_depth()
+
+    assert camera.thread is not None
+    assert camera.thread.is_alive()
+    assert isinstance(img, np.ndarray)
+
+
+# TODO(Steven): Fix this test for the latest version of pyrealsense2.
+@pytest.mark.skip("Skipping test: pyrealsense2 version > 2.55.1.6486")
+def test_async_read_depth_timeout():
+    config = RealSenseCameraConfig(serial_number_or_name="042", width=640, height=480, fps=30, use_depth=True)
+    camera = RealSenseCamera(config)
+    camera.connect(warmup=False)
+
+    with pytest.raises(TimeoutError):
+        camera.async_read_depth(timeout_ms=0)  # consumes any available frame by then
+        camera.async_read_depth(timeout_ms=0)  # request immediately another one
+
+
 def test_read_latest():
     config = RealSenseCameraConfig(serial_number_or_name="042", width=640, height=480, fps=30, warmup_s=0)
     with RealSenseCamera(config) as camera:
