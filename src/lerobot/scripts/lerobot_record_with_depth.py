@@ -220,7 +220,13 @@ def _attach_depth_capability(robot, depth_cams: list[str]):
         min_mm = int(MIN_DEPTH_M * 1000)
         max_mm = int(MAX_DEPTH_M * 1000)
         for cam in depth_cams:
-            depth = robot.cameras[cam].read_depth()  # uint16 mm
+            cam_obj = robot.cameras[cam]
+            # Prefer the non-blocking latest-frame accessor when available
+            # (RealSenseCamera). Falls back to read_depth() for other backends.
+            if hasattr(cam_obj, "read_depth_latest"):
+                depth = cam_obj.read_depth_latest()  # uint16 mm
+            else:
+                depth = cam_obj.read_depth()
             valid = depth > 0
             depth = np.where(
                 valid,
