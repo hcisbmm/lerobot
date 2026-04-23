@@ -581,7 +581,52 @@ class RealSenseCamera(Camera):
 
         return frame
 
-    # NOTE(Steven): Missing implementation for depth for now
+    @check_if_not_connected
+    def read_depth_latest(self, max_age_ms: int = 500) -> NDArray[Any]:
+        """
+        Returns the most recent depth frame captured immediately (Peeking).
+
+        This method is non-blocking and returns whatever is currently in the
+        memory buffer. Unlike `async_read`, it does not clear the new-frame
+        event nor wait for a fresh frame — it just peeks at whatever the
+        background capture thread has most recently stored. The frame may be
+        stale (hanging camera scenario e.g.).
+
+        Args:
+            max_age_ms (int): Maximum age in milliseconds a buffered frame may
+                have before it is rejected as stale. Defaults to 500ms.
+
+        Returns:
+            NDArray[Any]: The depth frame (numpy array, uint16, millimeters).
+
+        Raises:
+            TimeoutError: If the latest depth frame is older than `max_age_ms`.
+            DeviceNotConnectedError: If the camera is not connected.
+            RuntimeError: If the depth stream is not enabled, if the background
+                thread is not running, or if no depth frames have been captured yet.
+        """
+
+        if not self.use_depth:
+            raise RuntimeError(
+                f"Failed to capture depth frame '.read_depth_latest()'. Depth stream is not enabled for {self}."
+            )
+        if self.thread is None or not self.thread.is_alive():
+            raise RuntimeError(f"{self} read thread is not running.")
+
+        with self.frame_lock:
+            depth_map = self.latest_depth_frame
+            timestamp = self.latest_timestamp
+
+        if depth_map is None or timestamp is None:
+            raise RuntimeError(f"{self} has not captured any depth frames yet.")
+
+        age_ms = (time.perf_counter() - timestamp) * 1e3
+        if age_ms > max_age_ms:
+            raise TimeoutError(
+                f"{self} latest depth frame is too old: {age_ms:.1f} ms (max allowed: {max_age_ms} ms)."
+            )
+        return depth_map
+
     @check_if_not_connected
     def read_latest(self, max_age_ms: int = 500) -> NDArray[Any]:
         """Return the most recent (color) frame captured immediately (Peeking).
