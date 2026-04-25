@@ -45,6 +45,11 @@ class BiYamFollowerConfig(RobotConfig):
     use_palm_camera: bool = False
     palm_camera_fps: int = 30
     palm_camera_fourcc: str | None = "MJPG"
+    # Lock exposure to avoid auto-exposure overshoot when the gripper opens/closes.
+    # auto_exposure=1 puts V4L2 cameras into manual mode; tune `exposure` for scene brightness.
+    # Leave both None to keep the camera's auto-exposure behaviour.
+    palm_camera_auto_exposure: int | None = None
+    palm_camera_exposure: float | None = None
 
     # Cameras (shared between both arms)
     # When use_palm_camera=true, palm cameras are merged with any explicitly provided cameras
@@ -54,22 +59,26 @@ class BiYamFollowerConfig(RobotConfig):
         if self.use_palm_camera:
             palm_cameras: dict[str, CameraConfig] = {
                 "left_palm": OpenCVCameraConfig(
-                    index_or_path="/dev/v4l/by-path/pci-0000:00:14.0-usb-0:6.2.4:1.0-video-index0",
+                    index_or_path="/dev/v4l/by-path/pci-0000:00:14.0-usb-0:9.3.4:1.0-video-index0",
                     fps=self.palm_camera_fps,
                     width=480,
                     height=640,
                     rotation=Cv2Rotation.ROTATE_90,
                     warmup_s=3,
                     fourcc=self.palm_camera_fourcc,
+                    auto_exposure=self.palm_camera_auto_exposure,
+                    exposure=self.palm_camera_exposure,
                 ),
                 "right_palm": OpenCVCameraConfig(
-                    index_or_path="/dev/v4l/by-path/pci-0000:00:14.0-usb-0:6.3.4:1.0-video-index0",
+                    index_or_path="/dev/v4l/by-path/pci-0000:00:14.0-usb-0:9.4.4:1.0-video-index0",
                     fps=self.palm_camera_fps,
-                    width=480,
+                    width=640,
                     height=640,
                     rotation=Cv2Rotation.ROTATE_270,
                     warmup_s=3,
                     fourcc=self.palm_camera_fourcc,
+                    auto_exposure=self.palm_camera_auto_exposure,
+                    exposure=self.palm_camera_exposure,
                 ),
             }
             # Merge: palm cameras as base, explicit --robot.cameras overrides on collision

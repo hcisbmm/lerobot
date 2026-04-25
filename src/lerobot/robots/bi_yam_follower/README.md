@@ -315,9 +315,29 @@ lerobot-teleoperate \
     left: {"type": "intelrealsense", "serial_number_or_name": "335122271633", "width": 1280, "height": 720, "fps": 30},
     right: {"type": "intelrealsense", "serial_number_or_name": "323622271837", "width": 1280, "height": 720, "fps": 30}
   }' \
-  --robot.use_palm_camera=true
+  --robot.use_palm_camera=true \
+  --robot.palm_camera_auto_exposure=1 \
+  --robot.palm_camera_exposure=200
   
 ```
+
+**Palm camera parameters**
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--robot.use_palm_camera` | `false` | Enable the two palm USB cameras (`left_palm`, `right_palm`). Their device paths are pinned via `/dev/v4l/by-path/...` in [config_bi_yam_follower.py](config_bi_yam_follower.py). |
+| `--robot.palm_camera_fps` | `30` | Frame rate for both palm cameras. |
+| `--robot.palm_camera_fourcc` | `MJPG` | FOURCC codec. `MJPG` is required to hit 30 fps on most USB 2.0 webcams; set to `None` to auto-detect. |
+| `--robot.palm_camera_auto_exposure` | `None` | `cv2.CAP_PROP_AUTO_EXPOSURE`. On V4L2: `1` = manual (locked exposure), `3` = aperture priority (auto). Leave unset to keep the driver default. |
+| `--robot.palm_camera_exposure` | `None` | `cv2.CAP_PROP_EXPOSURE`. Only applied when `auto_exposure=1`. V4L2 unit ≈ 100 µs (so `200` ≈ 20 ms shutter). Typical Arducam range: `3–2047`. Higher = brighter but more motion blur and lower max FPS. Recommand value 200 |
+
+To find the valid exposure range for your camera:
+
+```bash
+v4l2-ctl -d /dev/v4l/by-path/pci-0000:00:14.0-usb-0:9.3.4:1.0-video-index0 -L | grep -A1 exposure
+```
+
+Setting `auto_exposure=1` + a fixed `exposure` value avoids the 1–2 s overexposure that the auto-exposure algorithm produces when the gripper opens/closes.
 
 **Using Intel RealSense cameras:**
 
