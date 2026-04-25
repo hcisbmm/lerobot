@@ -131,6 +131,48 @@ def log_rerun_data(
                         rr.log(f"{key}_{i}", rr.Scalars(float(vi)))
 
 
+def log_leader_follower_pos(
+    leader_action: RobotAction,
+    follower_obs: RobotObservation,
+    side: str | None = None,
+) -> None:
+    """Log per-joint leader-follower position error (leader - follower) to Rerun.
+
+    Iterates `.pos` scalar keys present in both the leader action and the follower
+    observation, and logs the difference under `tracking/<joint>/error` so all
+    selected joints overlay on a single plot.
+
+    Args:
+        leader_action: dict from teleop, e.g. {"left_joint_0.pos": ..., ...}.
+        follower_obs:  dict from robot observation with matching `.pos` keys.
+        side: "left" or "right" to restrict to one arm, "both" (or None) for all.
+    """
+
+    require_package("rerun-sdk", extra="viz", import_name="rerun")
+    import rerun as rr
+
+    if not leader_action:
+        return
+
+    prefix: str | None = None
+    if side in ("left", "right"):
+        prefix = f"{side}_"
+    elif side not in (None, "both"):
+        raise ValueError(f"side must be one of 'left', 'right', 'both', or None — got {side!r}")
+
+    for k, leader_v in leader_action.items():
+        key = str(k)
+        if not key.endswith(".pos") or not _is_scalar(leader_v):
+            continue
+        joint = key[: -len(".pos")]
+        if prefix is not None and not joint.startswith(prefix):
+            continue
+        follower_v = follower_obs.get(k) if follower_obs else None
+        if not _is_scalar(follower_v):
+            continue
+        rr.log(f"tracking/{joint}/error", rr.Scalars(float(leader_v) - float(follower_v)))
+
+
 # ---------------------------------------------------------------------------
 # Shared helpers for bimanual YAM (.eff / .pos) observation parsing
 # Used by TorqueVisualizer (2D matplotlib) and MujocoTorqueVisualizer (3D).

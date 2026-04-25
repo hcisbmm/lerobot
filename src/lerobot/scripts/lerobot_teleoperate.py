@@ -109,6 +109,7 @@ from lerobot.utils.visualization_utils import (
     MujocoTorqueVisualizer,
     TorqueVisualizer,
     init_rerun,
+    log_leader_follower_pos,
     log_rerun_data,
     shutdown_rerun,
 )
@@ -130,6 +131,9 @@ class TeleoperateConfig:
     display_port: int | None = None
     # Whether to  display compressed images in Rerun
     display_compressed_images: bool = False
+    # Log leader-follower position error under tracking/<joint>/error in Rerun.
+    # One of: "left", "right", "both", or None (disabled).
+    compare_leader_follower_data: str | None = None
     # Show real-time torque plot (requires follower arms with effort sensing)
     show_torque: bool = False
     # Only show end-effector (gripper) torques in torque plot
@@ -165,6 +169,7 @@ def teleop_loop(
     torque_visualizer: TorqueVisualizer | None = None,
     mujoco_torque_visualizer: MujocoTorqueVisualizer | None = None,
     record_effort: bool = False,
+    compare_leader_follower_data: str | None = None,
 ):
     """
     This function continuously reads actions from a teleoperation device, processes them through optional
@@ -233,6 +238,10 @@ def teleop_loop(
                 action=teleop_action,
                 compress_images=display_compressed_images,
             )
+            if compare_leader_follower_data:
+                log_leader_follower_pos(
+                    teleop_action, obs_transition, side=compare_leader_follower_data
+                )
 
             print("\n" + "-" * (display_len + 10))
             print(f"{'NAME':<{display_len}} | {'NORM':>7}")
@@ -299,6 +308,7 @@ def teleoperate(cfg: TeleoperateConfig):
             torque_visualizer=torque_viz,
             mujoco_torque_visualizer=mujoco_torque_viz,
             record_effort=cfg.record_effort,
+            compare_leader_follower_data=cfg.compare_leader_follower_data,
         )
     except KeyboardInterrupt:
         pass
