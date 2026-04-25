@@ -171,7 +171,7 @@ intelrealsense = [
 phone = ["hebi-py>=2.8.0,<2.12.0", "teleop>=0.1.0,<0.2.0", "fastapi<1.0", "lerobot[scipy-dep]"]
 yam = [
     "portal>=3.7.0,<4.0.0 ; sys_platform == 'linux'",
-    "i2rt @ file:./third_party/i2rt ; sys_platform == 'linux'"
+    "i2rt ; sys_platform == 'linux'"
 ]
 
 # Policies
@@ -584,3 +584,4 @@ torch = [
 torchvision = [
   { index = "pytorch-cu126" },
 ]
+i2rt = { path = "third_party/i2rt", editable = true }
