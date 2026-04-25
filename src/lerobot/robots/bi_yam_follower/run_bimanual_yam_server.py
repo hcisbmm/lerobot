@@ -220,6 +220,24 @@ class Args:
     leader_arm_type: Literal["yam", "yam_pro", "yam_ultra", "big_yam"] = "yam"
     """Type of leader arm hardware."""
 
+    # Friction feedforward (Cff in MIT mode) — applied to followers only.
+    # Leaders are usually in zero-torque mode and don't need stiction comp.
+    enable_friction_comp: bool = False
+    """Enable Coulomb friction feedforward on both follower arms."""
+
+    friction_breakaway: tuple[float, ...] = ()
+    """Per-joint breakaway torque (Nm) for follower friction comp.
+
+    Length must match follower DOF count (typically 7: 6 arm + 1 gripper).
+    Set 0 for joints without comp. Empty tuple disables comp.
+    Same values are applied to both left and right followers — split via
+    run_yam_server.py if per-arm tuning is needed.
+    Example for J0–J2 only: ``--friction_breakaway 0.3 0.4 0.3 0 0 0 0``.
+    """
+
+    friction_eps: float = 0.01
+    """Saturation width (rad) for the smooth Coulomb tanh comp."""
+
 
 def main(args: Args) -> None:
     """Main entry point for the bimanual Yam arm server."""
@@ -235,17 +253,29 @@ def main(args: Args) -> None:
     servers = []
     threads = []
 
+    follower_friction_kwargs = {
+        "enable_friction_comp": args.enable_friction_comp,
+        "friction_comp_breakaway": np.array(args.friction_breakaway) if args.friction_breakaway else None,
+        "friction_comp_eps": args.friction_eps,
+    }
+
     try:
         # Initialize and start follower arms
         print("connecting to follower arms...")
         right_follower_robot = get_yam_robot(
-            channel=args.right_follower_can, arm_type=follower_arm_type, gripper_type=follower_gripper_type
+            channel=args.right_follower_can,
+            arm_type=follower_arm_type,
+            gripper_type=follower_gripper_type,
+            **follower_friction_kwargs,
         )
         right_follower_server = ServerRobot(right_follower_robot, args.right_follower_port, "right_follower")
         servers.append(right_follower_server)
 
         left_follower_robot = get_yam_robot(
-            channel=args.left_follower_can, arm_type=follower_arm_type, gripper_type=follower_gripper_type
+            channel=args.left_follower_can,
+            arm_type=follower_arm_type,
+            gripper_type=follower_gripper_type,
+            **follower_friction_kwargs,
         )
         left_follower_server = ServerRobot(left_follower_robot, args.left_follower_port, "left_follower")
         servers.append(left_follower_server)

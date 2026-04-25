@@ -250,6 +250,24 @@ class Args:
     bilateral_kp: float = 0.0
     """Bilateral force feedback gain (used in leader mode)."""
 
+    enable_friction_comp: bool = False
+    """Enable Coulomb friction feedforward (Cff in MIT mode) on the follower.
+
+    Helps the first few joints overcome static friction on small leader motions
+    without raising kp. Has no effect unless ``friction_breakaway`` is also set.
+    """
+
+    friction_breakaway: tuple[float, ...] = ()
+    """Per-joint breakaway torque (Nm) for the friction feedforward.
+
+    Length must match the robot's DOF count (typically 7: 6 arm + 1 gripper).
+    Set 0 for joints that should not receive comp. Empty tuple disables it.
+    Example for tuning J0–J2 only: ``--friction_breakaway 0.5 0.6 0.4 0 0 0 0``.
+    """
+
+    friction_eps: float = 0.01
+    """Saturation width (rad) for the smooth Coulomb tanh comp."""
+
 
 def main(args: Args) -> None:
     """Main entry point for the Yam arm server."""
@@ -264,7 +282,14 @@ def main(args: Args) -> None:
 
     # Initialize robot (except for remote visualizer mode)
     if "remote" not in args.mode:
-        robot = get_yam_robot(channel=args.can_channel, gripper_type=gripper_type)
+        breakaway = np.array(args.friction_breakaway) if args.friction_breakaway else None
+        robot = get_yam_robot(
+            channel=args.can_channel,
+            gripper_type=gripper_type,
+            enable_friction_comp=args.enable_friction_comp,
+            friction_comp_breakaway=breakaway,
+            friction_comp_eps=args.friction_eps,
+        )
 
     if args.mode == "follower":
         # Run as follower: serve robot state and accept commands

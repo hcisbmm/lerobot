@@ -134,7 +134,8 @@ python -c "import i2rt, portal; print('Dependencies OK')"
 
 ### Step 1: Start the Unified Server
 
-The easiest way to start all 4 arm servers is using the unified server script. In one terminal:
+The easiest way to start all 4 arm servers is using the unified server script. In one terminal (add the flag below: --enable_friction_comp     --friction_breakaway 1.2 1.8 1.6 0.1 0 0 0     --friction_eps 0.005
+to trial and error best friction_comp parameter):
 
 ```bash
 python src/lerobot/robots/bi_yam_follower/run_bimanual_yam_server.py
@@ -170,7 +171,7 @@ Leave this terminal running while recording data.
 
 #### Step 2.1: Test Teleoperator (In another terminal)
 
-Before recording, test that the teleoperator connection works:
+Before recording, test that the teleoperator connection works (--compare_leader_follower_data to moniter the difference btw leader and follower joint position):
 
 ```bash
 lerobot-teleoperate \
@@ -180,7 +181,8 @@ lerobot-teleoperate \
   --teleop.type=bi_yam_leader \
   --teleop.left_arm_port=5002 \
   --teleop.right_arm_port=5001 \
-  --display_data=true
+  --display_data=true \
+  --compare_leader_follower_data=left
 ```
 
 #### With Torque Input
