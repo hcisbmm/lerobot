@@ -224,6 +224,26 @@ class OpenCVCamera(Camera):
         else:
             self._validate_fps()
 
+        # Order matters: switch to manual mode before locking the exposure value.
+        if self.config.auto_exposure is not None:
+            self._set_auto_exposure()
+        if self.config.exposure is not None:
+            self._set_exposure()
+
+    def _set_auto_exposure(self) -> None:
+        if self.videocapture is None:
+            raise DeviceNotConnectedError(f"{self} videocapture is not initialized")
+        success = self.videocapture.set(cv2.CAP_PROP_AUTO_EXPOSURE, float(self.config.auto_exposure))
+        if not success:
+            logger.warning(f"{self} failed to set auto_exposure={self.config.auto_exposure}.")
+
+    def _set_exposure(self) -> None:
+        if self.videocapture is None:
+            raise DeviceNotConnectedError(f"{self} videocapture is not initialized")
+        success = self.videocapture.set(cv2.CAP_PROP_EXPOSURE, float(self.config.exposure))
+        if not success:
+            logger.warning(f"{self} failed to set exposure={self.config.exposure}.")
+
     def _validate_fps(self) -> None:
         """Validates and sets the camera's frames per second (FPS)."""
 

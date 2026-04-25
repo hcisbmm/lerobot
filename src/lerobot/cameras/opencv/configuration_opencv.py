@@ -64,6 +64,10 @@ class OpenCVCameraConfig(CameraConfig):
     warmup_s: int = 1
     fourcc: str | None = None
     backend: Cv2Backends = Cv2Backends.ANY
+    # CAP_PROP_AUTO_EXPOSURE — backend-specific. On V4L2: 1=manual, 3=aperture priority.
+    auto_exposure: int | None = None
+    # CAP_PROP_EXPOSURE — absolute exposure when auto_exposure is set to manual.
+    exposure: float | None = None
 
     def __post_init__(self) -> None:
         self.color_mode = ColorMode(self.color_mode)
