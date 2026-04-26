@@ -40,7 +40,7 @@ Example usage:
 
 import time
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, Optional
 
 import numpy as np
 import portal
@@ -250,23 +250,26 @@ class Args:
     bilateral_kp: float = 0.0
     """Bilateral force feedback gain (used in leader mode)."""
 
-    enable_friction_comp: bool = False
-    """Enable Coulomb friction feedforward (Cff in MIT mode) on the follower.
+    # Friction feedforward (Cff in MIT mode). Defaults are read from the arm + gripper YAMLs;
+    # the flags below override those values when explicitly set.
+    enable_friction_comp: Optional[bool] = None
+    """Override for the YAML default; leave unset to use the arm-YAML value.
 
     Helps the first few joints overcome static friction on small leader motions
-    without raising kp. Has no effect unless ``friction_breakaway`` is also set.
+    without raising kp.
     """
 
     friction_breakaway: tuple[float, ...] = ()
-    """Per-joint breakaway torque (Nm) for the friction feedforward.
+    """Per-joint breakaway torque (Nm) override for the friction feedforward.
 
-    Length must match the robot's DOF count (typically 7: 6 arm + 1 gripper).
-    Set 0 for joints that should not receive comp. Empty tuple disables it.
-    Example for tuning J0–J2 only: ``--friction_breakaway 0.5 0.6 0.4 0 0 0 0``.
+    Empty tuple = use YAML defaults (arm 6 from arm YAML + gripper 1 from gripper YAML).
+    Pass length 6 to override arm joints only (gripper still comes from gripper YAML),
+    or length 7 to override arm + gripper. Set 0 for joints that should not receive comp.
+    Example for tuning J0–J3 only: ``--friction_breakaway 1.2 1.8 1.6 0.1 0 0 0``.
     """
 
-    friction_eps: float = 0.01
-    """Saturation width (rad) for the smooth Coulomb tanh comp."""
+    friction_eps: Optional[float] = None
+    """Saturation width (rad) override; leave unset to use the arm-YAML value."""
 
 
 def main(args: Args) -> None:
@@ -280,15 +283,20 @@ def main(args: Args) -> None:
 
     gripper_type = GripperType.from_string_name(gripper_name)
 
-    # Initialize robot (except for remote visualizer mode)
+    # Initialize robot (except for remote visualizer mode). Only forward CLI overrides
+    # the user actually set; otherwise let get_yam_robot pull the per-arm defaults from the YAML.
     if "remote" not in args.mode:
-        breakaway = np.array(args.friction_breakaway) if args.friction_breakaway else None
+        friction_kwargs: dict = {}
+        if args.enable_friction_comp is not None:
+            friction_kwargs["enable_friction_comp"] = args.enable_friction_comp
+        if args.friction_breakaway:
+            friction_kwargs["friction_comp_breakaway"] = np.array(args.friction_breakaway)
+        if args.friction_eps is not None:
+            friction_kwargs["friction_comp_eps"] = args.friction_eps
         robot = get_yam_robot(
             channel=args.can_channel,
             gripper_type=gripper_type,
-            enable_friction_comp=args.enable_friction_comp,
-            friction_comp_breakaway=breakaway,
-            friction_comp_eps=args.friction_eps,
+            **friction_kwargs,
         )
 
     if args.mode == "follower":

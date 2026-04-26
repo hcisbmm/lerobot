@@ -134,12 +134,22 @@ python -c "import i2rt, portal; print('Dependencies OK')"
 
 ### Step 1: Start the Unified Server
 
-The easiest way to start all 4 arm servers is using the unified server script. In one terminal (add the flag below: --enable_friction_comp     --friction_breakaway 1.2 1.8 1.6 0.1 0 0 0     --friction_eps 0.005
-to trial and error best friction_comp parameter):
+The easiest way to start all 4 arm servers is using the unified server script. Friction-compensation defaults are loaded from the arm + gripper YAMLs at launch (see [Friction compensation flags](#friction-compensation-flags-overrides) below), so the bare command below already applies the saved per-arm tuning:
 
 ```bash
 python src/lerobot/robots/bi_yam_follower/run_bimanual_yam_server.py
 ```
+
+For one-off friction-comp tuning experiments without editing the YAML, override on the CLI:
+
+```bash
+python src/lerobot/robots/bi_yam_follower/run_bimanual_yam_server.py \
+  --enable_friction_comp True \
+  --friction_breakaway 1.2 1.8 1.6 0.1 0 0 0 \
+  --friction_eps 0.005
+```
+
+Once you find values that work, copy them into the YAMLs (see [Where to store the tuned values](#where-to-store-the-tuned-values)) so future launches don't need any flags.
 
 This single command starts all 4 servers (2 followers + 2 leaders) with default settings:
 
@@ -157,6 +167,39 @@ python src/lerobot/robots/bi_yam_follower/run_bimanual_yam_server.py \
   --right_leader_can can2 \
   --left_leader_can can3
 ```
+
+#### Friction compensation flags (overrides)
+
+Coulomb friction feedforward (Cff in MIT mode) helps the first few joints overcome static friction on small leader motions without raising `kp`. Per-arm defaults live in the YAML configs under `third_party/i2rt/i2rt/robots/config/`, so **you don't need any flag for normal operation** — they're applied automatically based on `--follower_arm_type` (default `yam_ultra`). Use the flags below only to override on the fly.
+
+| Flag | Type | Default | What it does |
+| --- | --- | --- | --- |
+| `--enable_friction_comp` | `{None, True, False}` | `None` → use YAML | Force enable / force disable. `None` (omit the flag) means "honor the YAML's `friction_comp.enable`". |
+| `--friction_breakaway` | list of floats | `()` → use YAML | Per-joint breakaway torque (Nm) — the saturation amplitude of the smooth-tanh feedforward. Length **6** = arm joints only (gripper element is appended from the gripper YAML); length **7** = full arm + gripper override. Set 0 for joints you don't want compensated. |
+| `--friction_eps` | float | `None` → use YAML | Saturation width (rad) for the tanh blend (`τ = breakaway · tanh(err / eps)`). Smaller `eps` = sharper, more aggressive transition; larger = smoother but less stiction relief. Typical range 0.003–0.02. |
+
+Tuning loop: launch with the bare command, hand-drive the followers, watch for joints that lag or stick on small motions, then re-launch with overrides like `--friction_breakaway 1.2 1.8 1.6 0.1 0 0 0 --friction_eps 0.005` and iterate. Increase `breakaway` for sticky joints, lower `eps` if motion feels mushy, raise `eps` if joints chatter at zero crossings.
+
+#### Where to store the tuned values
+
+Once you've found values that work, save them to the YAMLs so every future launch picks them up without any flags. For the default `yam_ultra` follower with a `linear_4310` (a.k.a. `v3`) gripper:
+
+- **Arm YAML** — `third_party/i2rt/i2rt/robots/config/yam_ultra.yml` (or `yam.yml` / `yam_pro.yml` / `big_yam.yml` if you use a different `--follower_arm_type`):
+
+  ```yaml
+  friction_comp:
+    enable: true
+    breakaway: [1.2, 1.8, 1.6, 0.1, 0.0, 0.0]   # 6 = arm joints only (J0..J5)
+    eps: 0.005
+  ```
+
+- **Gripper YAML** — `third_party/i2rt/i2rt/robots/config/linear_4310.yml` (or whichever gripper you use):
+
+  ```yaml
+  friction_comp_breakaway: 0.0   # set non-zero only if the gripper motor itself benefits from comp
+  ```
+
+At runtime `get_yam_robot()` concatenates `arm.friction_comp.breakaway` (length 6) with the gripper's `friction_comp_breakaway` (length 1) into the final length-7 array, mirroring how `kp` / `kd` are assembled.
 
 **Run follower-only mode (without teaching handles):**
 

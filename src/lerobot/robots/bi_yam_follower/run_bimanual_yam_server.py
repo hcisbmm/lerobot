@@ -40,7 +40,7 @@ import sys
 import threading
 import time
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, Optional
 
 import numpy as np
 import portal
@@ -222,21 +222,23 @@ class Args:
 
     # Friction feedforward (Cff in MIT mode) — applied to followers only.
     # Leaders are usually in zero-torque mode and don't need stiction comp.
-    enable_friction_comp: bool = False
-    """Enable Coulomb friction feedforward on both follower arms."""
+    # Defaults are read from the arm + gripper YAMLs; flags below override.
+    enable_friction_comp: Optional[bool] = None
+    """Override for the YAML default; leave unset to use the arm-YAML value."""
 
     friction_breakaway: tuple[float, ...] = ()
-    """Per-joint breakaway torque (Nm) for follower friction comp.
+    """Per-joint breakaway torque (Nm) override for follower friction comp.
 
-    Length must match follower DOF count (typically 7: 6 arm + 1 gripper).
-    Set 0 for joints without comp. Empty tuple disables comp.
-    Same values are applied to both left and right followers — split via
-    run_yam_server.py if per-arm tuning is needed.
-    Example for J0–J2 only: ``--friction_breakaway 0.3 0.4 0.3 0 0 0 0``.
+    Empty tuple = use YAML defaults (arm 6 from arm YAML + gripper 1 from gripper YAML).
+    Pass length 6 to override arm joints only (gripper still comes from gripper YAML),
+    or length 7 to override arm + gripper. Set 0 for joints without comp.
+    Same values are applied to both left and right followers — use run_yam_server.py
+    if per-arm tuning is needed.
+    Example for J0–J3 only: ``--friction_breakaway 1.2 1.8 1.6 0.1 0 0 0``.
     """
 
-    friction_eps: float = 0.01
-    """Saturation width (rad) for the smooth Coulomb tanh comp."""
+    friction_eps: Optional[float] = None
+    """Saturation width (rad) override; leave unset to use the arm-YAML value."""
 
 
 def main(args: Args) -> None:
@@ -253,11 +255,15 @@ def main(args: Args) -> None:
     servers = []
     threads = []
 
-    follower_friction_kwargs = {
-        "enable_friction_comp": args.enable_friction_comp,
-        "friction_comp_breakaway": np.array(args.friction_breakaway) if args.friction_breakaway else None,
-        "friction_comp_eps": args.friction_eps,
-    }
+    # Only forward CLI overrides the user actually set; otherwise let get_yam_robot pull
+    # the per-arm defaults from the YAML.
+    follower_friction_kwargs: dict = {}
+    if args.enable_friction_comp is not None:
+        follower_friction_kwargs["enable_friction_comp"] = args.enable_friction_comp
+    if args.friction_breakaway:
+        follower_friction_kwargs["friction_comp_breakaway"] = np.array(args.friction_breakaway)
+    if args.friction_eps is not None:
+        follower_friction_kwargs["friction_comp_eps"] = args.friction_eps
 
     try:
         # Initialize and start follower arms
