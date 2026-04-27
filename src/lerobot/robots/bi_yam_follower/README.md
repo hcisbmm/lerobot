@@ -357,8 +357,8 @@ lerobot-teleoperate \
   --display_data=true \
   --robot.cameras='{
     top: {"type": "intelrealsense", "serial_number_or_name": "141722076304", "width": 640, "height": 480, "fps": 30},
-    left: {"type": "intelrealsense", "serial_number_or_name": "335122271633", "width": 1280, "height": 720, "fps": 30},
-    right: {"type": "intelrealsense", "serial_number_or_name": "323622271837", "width": 1280, "height": 720, "fps": 30}
+    left: {"type": "intelrealsense", "serial_number_or_name": "335122271633", "width": 640, "height": 480, "fps": 30},
+    right: {"type": "intelrealsense", "serial_number_or_name": "323622271837", "width": 640, "height": 480, "fps": 30}
   }' \
   --robot.use_palm_camera=true \
   --robot.palm_camera_auto_exposure=1 \
@@ -395,10 +395,11 @@ lerobot-teleoperate \
   --teleop.left_arm_port=5002 \
   --teleop.right_arm_port=5001 \
   --display_data=true \
+  --fps=30 \
   --robot.cameras='{
     top: {"type": "intelrealsense", "serial_number_or_name": "141722076304", "width": 640, "height": 480, "fps": 30},
-    left: {"type": "intelrealsense", "serial_number_or_name": "335122271633", "width": 1280, "height": 720, "fps": 30},
-    right: {"type": "intelrealsense", "serial_number_or_name": "323622271837", "width": 1280, "height": 720, "fps": 30}
+    left: {"type": "intelrealsense", "serial_number_or_name": "335122271633", "width": 640, "height": 480, "fps": 30},
+    right: {"type": "intelrealsense", "serial_number_or_name": "323622271837", "width": 640, "height": 480, "fps": 30}
   }'
 ```
 
@@ -420,8 +421,8 @@ lerobot-teleoperate-with-depth \
   --robot.right_arm_port=1234 \
   --robot.cameras='{
     top:   {"type": "intelrealsense", "serial_number_or_name": "141722076304", "width": 640,  "height": 480, "fps": 30, "use_depth": true},
-    left:  {"type": "intelrealsense", "serial_number_or_name": "335122271633", "width": 1280, "height": 720, "fps": 30, "use_depth": true},
-    right: {"type": "intelrealsense", "serial_number_or_name": "323622271837", "width": 1280, "height": 720, "fps": 30, "use_depth": true}
+    left:  {"type": "intelrealsense", "serial_number_or_name": "335122271633", "width": 640, "height": 480, "fps": 30, "use_depth": true},
+    right: {"type": "intelrealsense", "serial_number_or_name": "323622271837", "width": 640, "height": 480, "fps": 30, "use_depth": true}
   }' \
   --teleop.type=bi_yam_leader \
   --teleop.left_arm_port=5002 \
@@ -471,10 +472,11 @@ lerobot-teleoperate \
   --teleop.left_arm_port=5002 \
   --teleop.right_arm_port=5001 \
   --display_data=true \
+  --fps=30 \
   --robot.cameras='{
     top: {"type": "intelrealsense", "serial_number_or_name": "141722076304", "width": 640, "height": 480, "fps": 30},
-    left: {"type": "opencv", "index_or_path": 2, "width": 1280, "height": 720, "fps": 30},
-    right: {"type": "opencv", "index_or_path": 10, "width": 1280, "height": 720, "fps": 30}
+    left: {"type": "opencv", "index_or_path": 2, "width": 640, "height": 480, "fps": 30},
+    right: {"type": "opencv", "index_or_path": 10, "width": 640, "height": 480, "fps": 30}
   }'
 ```
 
@@ -499,7 +501,11 @@ lerobot-record \
   --dataset.repo_id="${HF_USER}/bimanual-yam-palm-demo" \
   --dataset.num_episodes=10 \
   --dataset.single_task="Pick and place the object" \
-  --display_data=true
+  --display_data=true \
+  --fps=30 \
+  --dataset.vcodec=hevc_nvenc \
+  --dataset.streaming_encoding=true \
+  --dataset.encoder_threads=2
 ```
 
 **With RealSense cameras (original setup):**
@@ -511,28 +517,8 @@ lerobot-record \
   --robot.right_arm_port=1234 \
   --robot.cameras='{
     top: {"type": "intelrealsense", "serial_number_or_name": "141722076304", "width": 640, "height": 480, "fps": 30},
-    left: {"type": "intelrealsense", "serial_number_or_name": "335122271633", "width": 1280, "height": 720, "fps": 30},
-    right: {"type": "intelrealsense", "serial_number_or_name": "323622271837", "width": 1280, "height": 720, "fps": 30}
-  }' \
-  --teleop.type=bi_yam_leader \
-  --teleop.left_arm_port=5002 \
-  --teleop.right_arm_port=5001 \
-  --dataset.repo_id="HGLLL/bimanual-yam-demo" \
-  --dataset.num_episodes=10 \
-  --dataset.reset_time_s=25 \
-  --dataset.single_task="Pick and place the object" \
-  --display_data=true
-```
-#### With Torque Recording
-```bash
-lerobot-record \
-  --robot.type=bi_yam_follower \
-  --robot.left_arm_port=1235 \
-  --robot.right_arm_port=1234 \
-  --robot.cameras='{
-    top: {"type": "intelrealsense", "serial_number_or_name": "141722076304", "width": 640, "height": 480, "fps": 30},
-    left: {"type": "intelrealsense", "serial_number_or_name": "335122271633", "width": 1280, "height": 720, "fps": 30},
-    right: {"type": "intelrealsense", "serial_number_or_name": "323622271837", "width": 1280, "height": 720, "fps": 30}
+    left: {"type": "intelrealsense", "serial_number_or_name": "335122271633", "width": 640, "height": 480, "fps": 30},
+    right: {"type": "intelrealsense", "serial_number_or_name": "323622271837", "width": 640, "height": 480, "fps": 30}
   }' \
   --teleop.type=bi_yam_leader \
   --teleop.left_arm_port=5002 \
@@ -542,7 +528,35 @@ lerobot-record \
   --dataset.reset_time_s=25 \
   --dataset.single_task="Pick and place the object" \
   --display_data=true \
-  --record_effort=true
+  --fps=30 \
+  --dataset.vcodec=hevc_nvenc \
+  --dataset.streaming_encoding=true \
+  --dataset.encoder_threads=2
+```
+#### With Torque Recording
+```bash
+lerobot-record \
+  --robot.type=bi_yam_follower \
+  --robot.left_arm_port=1235 \
+  --robot.right_arm_port=1234 \
+  --robot.cameras='{
+    top: {"type": "intelrealsense", "serial_number_or_name": "141722076304", "width": 640, "height": 480, "fps": 30},
+    left: {"type": "intelrealsense", "serial_number_or_name": "335122271633", "width": 640, "height": 480, "fps": 30},
+    right: {"type": "intelrealsense", "serial_number_or_name": "323622271837", "width": 640, "height": 480, "fps": 30}
+  }' \
+  --teleop.type=bi_yam_leader \
+  --teleop.left_arm_port=5002 \
+  --teleop.right_arm_port=5001 \
+  --dataset.repo_id="HGLLL/bimanual-yam-demo" \
+  --dataset.num_episodes=10 \
+  --dataset.reset_time_s=25 \
+  --dataset.single_task="Pick and place the object" \
+  --display_data=true \
+  --record_effort=true \
+  --fps=30 \
+  --dataset.vcodec=hevc_nvenc \
+  --dataset.streaming_encoding=true \
+  --dataset.encoder_threads=2
 ```
 
 #### With Depth Video Recording (RealSense)
@@ -570,8 +584,8 @@ lerobot-record-with-depth \
   --robot.right_arm_port=1234 \
   --robot.cameras='{
     top:   {"type": "intelrealsense", "serial_number_or_name": "141722076304", "width": 640,  "height": 480, "fps": 30, "use_depth": true},
-    left:  {"type": "intelrealsense", "serial_number_or_name": "335122271633", "width": 1280, "height": 720, "fps": 30, "use_depth": true},
-    right: {"type": "intelrealsense", "serial_number_or_name": "323622271837", "width": 1280, "height": 720, "fps": 30, "use_depth": true}
+    left:  {"type": "intelrealsense", "serial_number_or_name": "335122271633", "width": 640, "height": 480, "fps": 30, "use_depth": true},
+    right: {"type": "intelrealsense", "serial_number_or_name": "323622271837", "width": 640, "height": 480, "fps": 30, "use_depth": true}
   }' \
   --teleop.type=bi_yam_leader \
   --teleop.left_arm_port=5002 \
@@ -580,12 +594,14 @@ lerobot-record-with-depth \
   --dataset.num_episodes=10 \
   --dataset.reset_time_s=25 \
   --dataset.single_task="Pick and place the object" \
-  --dataset.streaming_encoding=true \
-  --dataset.encoder_threads=2 \
   --display_data=true \
   --depth_cams='[top, left, right]' \
   --min_depth_m=0.10 \
-  --max_depth_m=1.00
+  --max_depth_m=1.00 \
+  --fps=30 \
+  --dataset.vcodec=hevc_nvenc \
+  --dataset.streaming_encoding=true \
+  --dataset.encoder_threads=2
 ```
 
 Recorded features will include the usual `observation.images.{cam}` (RGB) **plus**
