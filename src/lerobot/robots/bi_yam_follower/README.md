@@ -395,6 +395,7 @@ lerobot-teleoperate \
   --teleop.left_arm_port=5002 \
   --teleop.right_arm_port=5001 \
   --display_data=true \
+  --display_compressed_images=true \
   --fps=30 \
   --robot.cameras='{
     top: {"type": "intelrealsense", "serial_number_or_name": "141722076304", "width": 640, "height": 480, "fps": 30},
