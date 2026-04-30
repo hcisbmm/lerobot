@@ -9,6 +9,9 @@ The bimanual Yam setup consists of:
 - **2 Follower Arms**: Controlled by LeRobot to execute actions
 - **2 Leader Arms**: With teaching handles for teleoperation
 - **4 CAN Interfaces**: For communication with the arms
+- **XELA tactile pad (optional)**: A 4×4 magnetic-field tactile sensor on the
+  right-side fingertip of the right gripper, served by `xela_server` over a
+  local WebSocket. See [Tactile Sensor (XELA, optional)](#tactile-sensor-xela-optional).
 
 ## Hardware Setup
 
@@ -92,6 +95,26 @@ echo "All CAN interfaces have been reset with bitrate 1000000."
 ```
 
 Save as `reset_can.sh`, make it executable with `chmod +x reset_can.sh`, and run with `./reset_can.sh`.
+
+### Optional: XELA Tactile Sensor
+
+To capture fingertip tactile readings during recording, mount an XELA XR1944
+(4×4 taxels × 3 axes) pad on the right-side fingertip of the right gripper.
+The sensor connects to the host via a **VScom USB-CAN Plus** adapter
+(`/dev/ttyUSB0`) with **two USB cables — both must be connected** (one is
+sensor-side power). The slCAN bus this exposes is independent of the 4 arm
+CAN interfaces above. The vendor software `xela_server` reads the slCAN
+stream and serves the latest reading on a local WebSocket (port 5000).
+
+For the one-time vendor software install (apt `can-utils`, `/etc/xela`
+directory + 777 perms, unpack `appimage.zip`, `PATH` setup, interactive
+`xela_conf`), see [**First-time setup**](../../tactile/xela/README.md#first-time-setup-one-time-per-machine)
+in the XELA backend README.
+
+For per-boot bring-up and per-session usage, see the
+[Tactile Sensor (XELA, optional)](#tactile-sensor-xela-optional)
+section below. No additional Python dependencies are needed —
+`websocket-client` is pulled in transitively by the base install.
 
 ## Software Setup
 
@@ -209,6 +232,19 @@ python src/lerobot/robots/bi_yam_follower/run_bimanual_yam_server.py \
 ```
 
 Leave this terminal running while recording data.
+
+**Optional — start `xela_server` for tactile recording:**
+
+If your recording will include the XELA tactile pad, start `xela_server` in
+a separate terminal alongside the arm servers. After the one-time slcand
+setup (see [Tactile Sensor (XELA, optional)](#tactile-sensor-xela-optional)),
+each session is just:
+
+```bash
+python src/lerobot/robots/bi_yam_follower/run_xela_server.py
+```
+
+Leave both this terminal AND the arm-server terminal running while recording.
 
 ### Step 2: Testing and Setup
 
@@ -481,7 +517,36 @@ lerobot-teleoperate \
   }'
 ```
 
-#### Step 2.4: Login to HuggingFace
+#### Step 2.4: Test Tactile Sensor (optional)
+
+If you've mounted the XELA pad, verify it connects before recording. The
+simplest test is to launch the teleoperate flow with the sensor configured:
+the connection is logged on startup, confirming `xela_server` is reachable
+at the resolved host:port.
+
+> **Prerequisite:** `xela_server` must already be running. Start it as
+> described in the [Tactile Sensor (XELA, optional)](#tactile-sensor-xela-optional)
+> section.
+
+```bash
+lerobot-teleoperate \
+  --robot.type=bi_yam_follower \
+  --robot.tactile_sensors='{right_finger_r: {type: xela, port: 5000, sensor_id: "1", model: XR1944}}' \
+  --teleop.type=bi_yam_leader \
+  --display_data=true
+```
+
+You should see two log lines confirming the sensor came up:
+
+```
+INFO ... _tactile.py:161 XELA host='auto' resolved to <your.local.ip>
+INFO ... _tactile.py:182 XELA WS connected (<host>:5000)
+```
+
+If either line is missing, or the WebSocket times out, see
+[Troubleshooting → Tactile Sensor Issues](#tactile-sensor-issues).
+
+#### Step 2.5: Login to HuggingFace
 
 Before recording, log in to HuggingFace:
 
@@ -720,6 +785,14 @@ XCAL-calibrated forces, or inspect a recorded episode, see the dedicated
 - `robot.cameras`: Camera configurations (same as other robots)
 - `robot.left_arm_max_relative_target`: Optional safety limit for left arm
 - `robot.right_arm_max_relative_target`: Optional safety limit for right arm
+- `robot.tactile_sensors`: Optional dict of tactile sensors keyed by name
+  (e.g., `right_finger_r`). Each value picks a backend via `type:` (`xela`
+  for hardware, `mock` for CI/offline development). For `xela`, fields are
+  `host` (default `"auto"` — resolves to the LAN IP), `port` (default `5000`),
+  `sensor_id` (default `"1"`), `model` (default `"XR1944"`),
+  `use_calibrated` (default `false`), `tare_on_connect` (default `false`).
+  See [Tactile Sensor (XELA, optional)](#tactile-sensor-xela-optional) for
+  full details and the recorded-key naming convention.
 
 #### Teleoperator Configuration (`bi_yam_leader`)
 
@@ -742,29 +815,30 @@ The teaching handles don't have physical grippers, but they have an **encoder bu
 ### Data Flow
 
 ```
-┌─────────────────┐         ┌─────────────────┐
-│  Leader Arms    │         │  Follower Arms  │
-│  (Teaching      │         │  (Execution)    │
-│   Handles)      │         │                 │
-└────────┬────────┘         └────────▲────────┘
-         │                           │
-         │ Read State                │ Send Actions
-         │                           │
-    ┌────▼────┐              ┌───────┴─────┐
-    │ Leader  │              │  Follower   │
-    │ Servers │              │  Servers    │
-    │ (5001,  │              │  (1234,     │
-    │  5002)  │              │   1235)     │
-    └────┬────┘              └───────▲─────┘
-         │                           │
-         │                           │
-    ┌────▼───────────────────────────┴──────┐
-    │         LeRobot Recording             │
-    │  - bi_yam_leader (teleoperator)       │
-    │  - bi_yam_follower (robot)            │
-    │  - Cameras                            │
-    │  - Dataset writer                     │
-    └───────────────────────────────────────┘
+┌─────────────────┐         ┌─────────────────┐    ┌──────────────┐
+│  Leader Arms    │         │  Follower Arms  │    │  XELA Pad    │
+│  (Teaching      │         │  (Execution +   │    │  (right      │
+│   Handles)      │         │   gripper)      │    │   finger r,  │
+│                 │         │                 │    │   optional)  │
+└────────┬────────┘         └────────▲────────┘    └──────┬───────┘
+         │                           │                    │
+         │ Read State                │ Send Actions       │ slCAN /tty
+         │                           │                    │
+    ┌────▼────┐              ┌───────┴─────┐         ┌────▼─────┐
+    │ Leader  │              │  Follower   │         │  XELA    │
+    │ Servers │              │  Servers    │         │  Server  │
+    │ (5001,  │              │  (1234,     │         │  (WS     │
+    │  5002)  │              │   1235)     │         │   :5000) │
+    └────┬────┘              └───────▲─────┘         └────┬─────┘
+         │                           │                    │
+         │                           │                    │
+    ┌────▼───────────────────────────┴────────────────────┴──────┐
+    │              LeRobot Recording                              │
+    │  - bi_yam_leader (teleoperator)                             │
+    │  - bi_yam_follower (robot + tactile sensors)                │
+    │  - Cameras                                                  │
+    │  - Dataset writer                                           │
+    └─────────────────────────────────────────────────────────────┘
 ```
 
 ### Server Process Details
@@ -789,6 +863,17 @@ Each server:
 2. Provides gravity compensation
 3. Exposes the robot state via a portal RPC server
 4. Accepts position commands (for follower arms) or reads state (for leader arms)
+
+**XELA Tactile Server (`run_xela_server.py`)**:
+
+- Wraps the vendor `xela_server` binary in a managed Python subprocess.
+- Reads slCAN frames from `/dev/ttyUSB0` (configured via the one-time
+  `xela_conf` step) and serves the latest 4×4×3 reading over a local
+  WebSocket on port 5000.
+- Required only when recording with the XELA tactile pad; independent of
+  the four arm servers.
+- See [Tactile Sensor (XELA, optional)](#tactile-sensor-xela-optional) for
+  setup and lifecycle commands.
 
 ## Troubleshooting
 
@@ -831,6 +916,56 @@ If you see warnings about slow control frequency:
 - This usually means the system is overloaded
 - Try reducing camera resolution or FPS
 - Check CPU usage and close unnecessary applications
+- Watch out for *first-second* warmup warnings (camera cold start, NVENC
+  encoder init): the FPS warning fires at the very first frame interval and
+  may report a dramatic value (e.g., 4 Hz) even though the loop catches up to
+  the target rate within a second. Confirm steady state before acting.
+
+### Tactile Sensor Issues
+
+If `lerobot-record --robot.tactile_sensors=...` errors out, work through:
+
+**`Couldn't find a choice class for 'xela'`** — the backend wasn't registered
+before draccus parsed the CLI. Make sure you're on the version that
+pre-imports `XelaTactileConfig` in `src/lerobot/tactile/__init__.py`. If
+installing from a fork, sync to the latest tactile commits.
+
+**`WebSocket connection refused` / WS timeout** — `xela_server` isn't running,
+or it's on a different host/port than what you passed. Check:
+
+```bash
+ps aux | grep xela_server          # is it running?
+ss -ltnp | grep ':5000'            # is the port bound?
+xela_conf -d socketcan -c slcan0   # re-init slCAN if it dropped
+```
+
+**XELA `host='auto'` resolves to the wrong IP** — the auto-resolver picks the
+NIC that routes to a public IP. If you have multiple NICs (VPN, `docker0`,
+or a separate management network), pass the LAN IP explicitly:
+
+```bash
+--robot.tactile_sensors='{right_finger_r: {type: xela, host: 192.168.1.86, port: 5000, sensor_id: "1", model: XR1944}}'
+```
+
+**Sensor disconnects mid-session** — the XELA stream is robust, but a USB
+unplug or `slcand` reset will drop the WS. The recorder logs the close but
+does not auto-reconnect mid-episode. Stop the run, fix the link, and resume.
+
+**Frame validation crashes with shape `(48,)`** — symptom of the now-fixed
+"1D tactile feature mis-classified as a video stream" bug. Make sure you're
+on the version that includes the `hw_to_dataset_features` rank split (commit
+`a882a8da` or later).
+
+**Stale orphan dataset directory** — if a previous tactile run crashed before
+saving any episode, `~/.cache/huggingface/lerobot/<repo>` may contain only
+`meta/info.json` and block re-creation with
+`FileExistsError`. Delete the directory or rename it before re-recording.
+
+**Slow record loop with tactile + cameras** — the WS read itself is cheap
+(one small frame per loop), but on a 3-camera + Rerun setup the FPS warning
+can fire transiently from camera/encoder warmup. See [Slow Control
+Loop](#slow-control-loop) above; if steady-state rate is still below target,
+toggle `--display_data=false` first.
 
 ## Advanced Usage
 
@@ -907,12 +1042,21 @@ A single XELA XR1944 tactile pad mounted on the right-side fingertip of the righ
 parallel gripper, served by [`xela_server`](../../tactile/xela/README.md) v1.7.x over
 a local WebSocket.
 
-### One-time setup (per boot)
+### Per-boot setup
+
+> **First time on this machine?** Complete the
+> [First-time setup](../../tactile/xela/README.md#first-time-setup-one-time-per-machine)
+> in the XELA backend README first (apt `can-utils`, `/etc/xela` directory,
+> unpack the vendor `appimage.zip`, `PATH`, interactive `xela_conf`). The
+> commands below assume those one-time steps are already done.
+
+Each boot, bring slCAN up and (re)write `xServ.ini` if it doesn't already
+match your hardware:
 
 ```bash
 sudo slcand -o -s8 -t hw -S 3000000 /dev/ttyUSB0 slcan0
 sudo ifconfig slcan0 up
-xela_conf -d socketcan -c slcan0   # writes /etc/xela/xServ.ini if missing
+xela_conf -d socketcan -c slcan0   # writes /etc/xela/xServ.ini if missing — answer y<Enter> to save
 ```
 
 ### Per session
@@ -993,3 +1137,12 @@ uv run python examples/tactile/inspect_tactile_dataset.py \
   - Used internally by `run_yam_server.py` for hardware communication
 - **portal**: RPC framework for client-server communication (installed with yam dependencies)
 - **LeRobot documentation**: See main docs for training and evaluation workflows
+- **XELA backend (LeRobot)**: [`src/lerobot/tactile/xela/README.md`](../../tactile/xela/README.md)
+  — WebSocket protocol details, sensor model table (`XR1944`, `XR1946`,
+  `XR2244`, `XR1922`), and calibration notes.
+- **Inspect tactile data**: [`examples/tactile/inspect_tactile_dataset.py`](../../../../examples/tactile/inspect_tactile_dataset.py)
+  — schema check, time-series plot, 4×4 contact heatmap, and per-axis
+  spatial frame views for any recorded episode.
+- **XELA Software Manual**: vendor documentation for `xela_server`,
+  `xela_conf`, slCAN setup, and per-model taxel layouts (consult the manual
+  shipped with your sensor).
