@@ -503,7 +503,7 @@ lerobot-record \
   --dataset.num_episodes=10 \
   --dataset.single_task="Pick and place the object" \
   --display_data=true \
-  --fps=30 \
+  --dataset.fps=30 \
   --dataset.vcodec=hevc_nvenc \
   --dataset.streaming_encoding=true \
   --dataset.encoder_threads=2
@@ -529,7 +529,7 @@ lerobot-record \
   --dataset.reset_time_s=25 \
   --dataset.single_task="Pick and place the object" \
   --display_data=true \
-  --fps=30 \
+  --dataset.fps=30 \
   --dataset.vcodec=hevc_nvenc \
   --dataset.streaming_encoding=true \
   --dataset.encoder_threads=2
@@ -554,7 +554,7 @@ lerobot-record \
   --dataset.single_task="Pick and place the object" \
   --display_data=true \
   --record_effort=true \
-  --fps=30 \
+  --dataset.fps=30 \
   --dataset.vcodec=hevc_nvenc \
   --dataset.streaming_encoding=true \
   --dataset.encoder_threads=2
@@ -599,7 +599,7 @@ lerobot-record-with-depth \
   --depth_cams='[top, left, right]' \
   --min_depth_m=0.10 \
   --max_depth_m=1.00 \
-  --fps=30 \
+  --dataset.fps=30 \
   --dataset.vcodec=hevc_nvenc \
   --dataset.streaming_encoding=true \
   --dataset.encoder_threads=2
@@ -879,7 +879,7 @@ lerobot-record \
   --dataset.num_episodes=10 \
   --dataset.single_task="Pick and place with tactile feedback" \
   --display_data=true \
-  --fps=30
+  --dataset.fps=30
 ```
 
 ### Stopping `xela_server` after the session
