@@ -1068,15 +1068,12 @@ python src/lerobot/robots/bi_yam_follower/run_xela_server.py
 # Terminal B — start arm servers (existing pattern, leave running)
 python src/lerobot/robots/bi_yam_follower/run_bimanual_yam_server.py
 
-# Terminal C — record with tactile included
-# `host` is omitted because the default "auto" resolves to the same LAN IP
-# xela_server bound to (v1.7.6 ignores --ip and binds to the primary NIC).
+# Terminal C — record with tactile included.
+# `host` is omitted; the client's default "auto" resolves to the LAN IP
+# xela_server binds to (see the XELA backend README's "Bring-up checklist").
 lerobot-record \
   --robot.type=bi_yam_follower \
-  --robot.tactile_sensors='{
-     right_finger_r: {"type":"xela","port":5000,
-                      "sensor_id":"1","model":"XR1944"}
-  }' \
+  --robot.tactile_sensors='{right_finger_r: {type: xela, port: 5000, sensor_id: "1", model: XR1944}}' \
   --teleop.type=bi_yam_leader \
   --dataset.repo_id="${HF_USER}/bimanual-yam-tactile-demo" \
   --dataset.num_episodes=10 \
@@ -1085,15 +1082,15 @@ lerobot-record \
   --dataset.fps=30
 ```
 
+For tactile combined with cameras, see [Step 3 → With Tactile Sensor (XELA, optional)](#with-tactile-sensor-xela-optional)
+above.
+
 ### Stopping `xela_server` after the session
 
-`Ctrl+C` doesn't kill a backgrounded (`&`) process. Use one of:
-
-```bash
-kill $!                  # if you launched it via `&` in this shell
-pkill -f xela_server     # SIGTERM by name
-pkill -9 xela_server     # SIGKILL fallback (manual's recommendation)
-```
+See [Terminating `xela_server`](../../tactile/xela/README.md#terminating-xela_server)
+in the XELA backend README — covers `kill $!` for foreground-launched processes,
+`pkill -f xela_server` for stale instances, and the SIGKILL / `Ctrl+Shift+\`
+fallbacks if SIGTERM hangs.
 
 ### Recorded keys
 

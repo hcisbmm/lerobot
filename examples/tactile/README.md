@@ -1,9 +1,16 @@
 # Tactile Inspection Examples
 
 Utilities for examining tactile data captured by `lerobot-record` with an XELA
-sensor. See [`src/lerobot/tactile/`](../../src/lerobot/tactile/) for the
-subsystem and [`src/lerobot/robots/bi_yam_follower/README.md`](../../src/lerobot/robots/bi_yam_follower/README.md#tactile-sensor-xela-optional)
-for the recording instructions.
+sensor. Related docs:
+
+- [`src/lerobot/tactile/`](../../src/lerobot/tactile/) — subsystem overview,
+  data contract, and adding new sensor backends.
+- [`src/lerobot/tactile/xela/README.md`](../../src/lerobot/tactile/xela/README.md)
+  — XELA wire protocol, vendor first-time setup (apt / `/etc/xela` / unpack
+  `appimage.zip` / interactive `xela_conf`), per-boot bring-up, and the full
+  failure-modes reference.
+- [`src/lerobot/robots/bi_yam_follower/README.md`](../../src/lerobot/robots/bi_yam_follower/README.md#tactile-sensor-xela-optional)
+  — recording-side usage on the bimanual Yam follower.
 
 ## `inspect_tactile_dataset.py`
 
@@ -43,6 +50,13 @@ uv run python examples/tactile/inspect_tactile_dataset.py \
 
 ### Dependencies
 
-`matplotlib` is needed for the plot modes; it ships with the project's `dev`
-extras. If you only want the headless `summary` mode, no extra installs
-beyond the core deps are required.
+The headless `summary` mode needs only the core install (`uv sync --locked`).
+
+The plot modes (`timeseries`, `heatmap`, `frame`, `all`) need `matplotlib`,
+which lives behind the `matplotlib-dep` extra (also pulled in by `dev`):
+
+```bash
+uv sync --locked --extra matplotlib-dep    # minimal: just matplotlib
+# or, if you already work with the dev tooling:
+uv sync --locked --extra dev
+```
