@@ -20,7 +20,7 @@ from lerobot.tactile.xela.configuration_xela import XelaTactileConfig
 def test_default_config():
     cfg = XelaTactileConfig()
     assert cfg.type == "xela"
-    assert cfg.host == "127.0.0.1"
+    assert cfg.host == "auto"
     assert cfg.port == 5000
     assert cfg.sensor_id == "1"
     assert cfg.model == "XR1944"

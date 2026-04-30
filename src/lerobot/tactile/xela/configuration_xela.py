@@ -32,9 +32,16 @@ AXES_PER_TAXEL = 3
 @TactileSensorConfig.register_subclass("xela")
 @dataclass
 class XelaTactileConfig(TactileSensorConfig):
-    """Config for an XELA Robotics tactile sensor served by `xela_server` (v1.7.x)."""
+    """Config for an XELA Robotics tactile sensor served by `xela_server` (v1.7.x).
 
-    host: str = "127.0.0.1"
+    Note on `host`: XELA Server v1.7.6 build 158509 silently ignores the `--ip`
+    flag and always binds to the host's primary NIC IP (e.g., 192.168.x.x). Pass
+    `host="auto"` to let `XelaTactileSensor` resolve that IP at connect time
+    using the same heuristic XELA uses (the route to a public IP). Override with
+    an explicit IP/hostname if you know the bind address.
+    """
+
+    host: str = "auto"
     port: int = 5000
     sensor_id: str = "1"
     model: str = "XR1944"

@@ -38,8 +38,10 @@ def main() -> int:
                     help="Path to the xela_server AppImage (default: /etc/xela/xela_server).")
     ap.add_argument("--config", type=Path, default=DEFAULT_INI,
                     help="Path to xServ.ini (default: /etc/xela/xServ.ini).")
-    ap.add_argument("--ip", default="127.0.0.1",
-                    help="Server bind IP. Default 127.0.0.1 to keep the WS local-only.")
+    ap.add_argument("--ip", default=None,
+                    help="Forwarded as --ip to xela_server. NOTE: v1.7.6 build 158509 "
+                         "silently ignores this flag and always binds to the host's "
+                         "primary NIC IP. Leave unset to skip the no-op flag.")
     ap.add_argument("--port", type=int, default=5000,
                     help="Server WebSocket port. Default 5000 matches XELA's manual.")
     ap.add_argument("--noros", action="store_true", default=True,
@@ -54,10 +56,12 @@ def main() -> int:
               f"Run `xela_conf -d socketcan -c slcan0` first.", file=sys.stderr)
         return 1
 
-    # XELA's AppImage CLI requires LONG forms (--ip, --port) — short -i / -p are
-    # silently ignored and the server falls back to its default (first NIC IP).
-    cmd = [str(args.xela_bin), "-f", str(args.config),
-           "--ip", args.ip, "-p", str(args.port)]
+    # XELA's AppImage v1.7.6 build 158509 ignores --ip entirely (always binds to
+    # the host's primary NIC IP). We omit it unless the user forces one — passing
+    # it would just be misleading documentation.
+    cmd = [str(args.xela_bin), "-f", str(args.config), "-p", str(args.port)]
+    if args.ip is not None:
+        cmd.extend(["--ip", args.ip])
     if args.noros:
         cmd.append("--noros")
 

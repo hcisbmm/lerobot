@@ -14,6 +14,7 @@
 
 import json
 import logging
+import socket
 import threading
 import time
 from typing import TYPE_CHECKING
@@ -35,6 +36,25 @@ else:
 logger = logging.getLogger(__name__)
 
 _MAX_BACKOFF_S = 2.0
+
+
+def _resolve_host(host: str) -> str:
+    """Resolve ``"auto"`` to the host's primary outbound-route IP.
+
+    Mirrors xela_server's heuristic: it binds to the IP the OS would use to
+    reach the public internet (typically the LAN IP, e.g. 192.168.x.x).
+    Anything else is returned unchanged.
+    """
+    if host != "auto":
+        return host
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("8.8.8.8", 80))  # no packet is actually sent
+        return s.getsockname()[0]
+    except OSError:
+        return "127.0.0.1"
+    finally:
+        s.close()
 
 
 class XelaTactileSensor(TactileSensor):
@@ -136,7 +156,10 @@ class XelaTactileSensor(TactileSensor):
 
     def _reader_loop(self) -> None:
         backoff = self.config.reconnect_backoff_s
-        url = f"ws://{self.config.host}:{self.config.port}"
+        resolved_host = _resolve_host(self.config.host)
+        if resolved_host != self.config.host:
+            logger.info("XELA host=%r resolved to %s", self.config.host, resolved_host)
+        url = f"ws://{resolved_host}:{self.config.port}"
         while not self._stop.is_set():
             try:
                 self._ws_app = websocket.WebSocketApp(
@@ -198,7 +221,9 @@ class XelaTactileSensor(TactileSensor):
         import argparse
 
         ap = argparse.ArgumentParser(description="XELA tactile sensor smoke test.")
-        ap.add_argument("--host", default="127.0.0.1")
+        ap.add_argument("--host", default="auto",
+                        help="XELA server IP. Default 'auto' resolves to the host's "
+                             "primary LAN IP (matches xela_server's bind behavior).")
         ap.add_argument("--port", type=int, default=5000)
         ap.add_argument("--sensor-id", default="1")
         ap.add_argument("--model", default="XR1944")
