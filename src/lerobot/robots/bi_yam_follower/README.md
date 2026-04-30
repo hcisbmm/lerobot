@@ -842,6 +842,60 @@ lerobot-record \
   --dataset.num_episodes=5
 ```
 
+## Tactile Sensor (XELA, optional)
+
+A single XELA XR1944 tactile pad mounted on the right-side fingertip of the right arm's
+parallel gripper, served by [`xela_server`](../../tactile/xela/README.md) v1.7.x over
+a local WebSocket.
+
+### One-time setup (per boot)
+
+```bash
+sudo slcand -o -s8 -t hw -S 3000000 /dev/ttyUSB0 slcan0
+sudo ifconfig slcan0 up
+xela_conf -d socketcan -c slcan0   # writes /etc/xela/xServ.ini if missing
+```
+
+### Per session
+
+```bash
+# Terminal A — start XELA server (leave running)
+python src/lerobot/robots/bi_yam_follower/run_xela_server.py
+
+# Terminal B — start arm servers (existing pattern, leave running)
+python src/lerobot/robots/bi_yam_follower/run_bimanual_yam_server.py
+
+# Terminal C — record with tactile included
+lerobot-record \
+  --robot.type=bi_yam_follower \
+  --robot.tactile_sensors='{
+     right_finger_r: {"type":"xela","host":"127.0.0.1","port":5000,
+                      "sensor_id":"1","model":"XR1944"}
+  }' \
+  --teleop.type=bi_yam_leader \
+  --dataset.repo_id="${HF_USER}/bimanual-yam-tactile-demo" \
+  --dataset.num_episodes=10 \
+  --dataset.single_task="Pick and place with tactile feedback" \
+  --display_data=true \
+  --fps=30
+```
+
+### Recorded keys
+
+| Key | Shape | Dtype | Notes |
+| --- | --- | --- | --- |
+| `observation.tactile.right_finger_r` | `(48,)` | `float32` | Raw uint16 magnetic-field readings cast losslessly to float32 (16 taxels × X/Y/Z). |
+
+To enable XCAL-calibrated forces (Newtons) alongside, add `"use_calibrated": true` to
+the sensor config; a sibling `observation.tactile.right_finger_r.cal` key appears when
+`xela_server` has the `.xcal` files installed.
+
+### Naming convention for adding more sensors
+
+`observation.tactile.<arm>_finger_<side>` where `arm ∈ {left, right}` and
+`side ∈ {l, r}` (which jaw of the parallel gripper). Add additional entries to
+`--robot.tactile_sensors='{...}'` and the keys appear in the dataset automatically.
+
 ## References
 
 - **i2rt library**: Python library for controlling Yam arm hardware (install via `pip install -e '.[yam]'`)
