@@ -650,6 +650,65 @@ set_depth_range(info["video.depth_min_m"], info["video.depth_max_m"])
 - `DEPTH_CODEC` / `DEPTH_PIX_FMT` / `DEPTH_CRF` — codec knobs. Default
   `libsvtav1 / yuv420p10le / crf=0` is lossless given the 10-bit quantization.
 
+#### With Tactile Sensor (XELA, optional)
+
+To capture XELA tactile readings alongside the standard observation stream,
+add `--robot.tactile_sensors='{...}'`. Each pad is keyed by a descriptive name
+(e.g., `right_finger_r` for the right-jaw fingertip pad on the right gripper)
+and surfaces in the dataset as `observation.tactile.<name>`.
+
+> **Prerequisite:** `xela_server` must be running before `lerobot-record`
+> launches. See the [Tactile Sensor (XELA, optional)](#tactile-sensor-xela-optional)
+> section below for one-time setup, multi-sensor naming, calibrated forces,
+> and how to stop the server after recording.
+
+**Tactile only (no cameras)** — useful for sanity-checking the sensor pipeline
+or training touch-only policies:
+
+```bash
+lerobot-record \
+  --robot.type=bi_yam_follower \
+  --robot.tactile_sensors='{right_finger_r: {type: xela, port: 5000, sensor_id: "1", model: XR1944}}' \
+  --teleop.type=bi_yam_leader \
+  --dataset.repo_id="${HF_USER}/bimanual-yam-tactile-demo" \
+  --dataset.num_episodes=10 \
+  --dataset.single_task="Pick and place with tactile feedback" \
+  --display_data=true \
+  --dataset.fps=30
+```
+
+**Tactile + RealSense cameras** — typical contact-rich manipulation recording:
+
+```bash
+lerobot-record \
+  --robot.type=bi_yam_follower \
+  --robot.left_arm_port=1235 \
+  --robot.right_arm_port=1234 \
+  --robot.cameras='{
+    top:   {"type": "intelrealsense", "serial_number_or_name": "141722076304", "width": 640, "height": 480, "fps": 30},
+    left:  {"type": "intelrealsense", "serial_number_or_name": "335122271633", "width": 640, "height": 480, "fps": 30},
+    right: {"type": "intelrealsense", "serial_number_or_name": "323622271837", "width": 640, "height": 480, "fps": 30}
+  }' \
+  --robot.tactile_sensors='{right_finger_r: {type: xela, port: 5000, sensor_id: "1", model: XR1944}}' \
+  --teleop.type=bi_yam_leader \
+  --teleop.left_arm_port=5002 \
+  --teleop.right_arm_port=5001 \
+  --dataset.repo_id="${HF_USER}/bimanual-yam-tactile-vision-demo" \
+  --dataset.num_episodes=10 \
+  --dataset.reset_time_s=25 \
+  --dataset.single_task="Pick and place with tactile + vision" \
+  --display_data=true \
+  --dataset.fps=30 \
+  --dataset.vcodec=hevc_nvenc \
+  --dataset.streaming_encoding=true \
+  --dataset.encoder_threads=2
+```
+
+The recorded key is `observation.tactile.right_finger_r` with shape `(48,)`
+(16 taxels × X/Y/Z) and dtype `float32`. To add more sensors, enable
+XCAL-calibrated forces, or inspect a recorded episode, see the dedicated
+[Tactile Sensor (XELA, optional)](#tactile-sensor-xela-optional) section.
+
 ### Configuration Parameters
 
 #### Robot Configuration (`bi_yam_follower`)
