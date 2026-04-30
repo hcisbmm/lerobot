@@ -13,7 +13,7 @@ LeRobot's `BiYamFollower` records joint state, effort, and camera frames. The la
 ## Constraints (verified)
 
 - **Hardware:** one XR1944 board on `slcan0` (`/etc/xela/xServ.ini` shows `num_brd=1`, `model=XR1944`, `channel=0`, `bustype=socketcan`, `channel=slcan0`).
-- **Wire protocol:** XELA Server pushes JSON frames over a WebSocket (`ws://<ip>:<port>`, default port 5000), confirmed by the v1.7.6 manual and an observed disconnect line in `/etc/xela/LOG/xela_server.log`. Default `--ip` resolves to the first NIC; we pin to `127.0.0.1` for local-only use.
+- **Wire protocol:** XELA Server pushes JSON frames over a WebSocket (`ws://<ip>:<port>`, default port 5000), confirmed by the v1.7.6 manual and an observed disconnect line in `/etc/xela/LOG/xela_server.log`. **Empirically the AppImage v1.7.6 build 158509 silently ignores `--ip` and always binds to the host's primary NIC IP** (e.g., 192.168.x.x), so we cannot pin to 127.0.0.1. The `XelaTactileConfig.host` default is `"auto"`, which `XelaTactileSensor` resolves at connect time to the same outbound-route IP `xela_server` uses (UDP socket trick to discover the route to a public IP).
 - **Sample rate:** ~102 Hz observed in `xela_server.log` (`[PCHECK]…102.5Hz`). Teleop loop is 30 Hz → consumer is sample-and-hold.
 - **Frame schema** (manual p. 37):
   ```
@@ -23,7 +23,7 @@ LeRobot's `BiYamFollower` records joint state, effort, and camera frames. The la
   ```
   `data` is comma-separated, leading-zero-stripped hex, length `3 * taxels` (X,Y,Z per taxel).
 - **First message:** `{"message":"Welcome", ...}` — must be skipped.
-- **Bring-up:** `slcand -o -s8 -t hw -S 3000000 /dev/ttyUSB0 slcan0` → `ifconfig slcan0 up` → (one-shot) `xela_conf -d socketcan -c slcan0` → `xela_server -f /etc/xela/xServ.ini --ip 127.0.0.1 -p 5000 --noros`.
+- **Bring-up:** `slcand -o -s8 -t hw -S 3000000 /dev/ttyUSB0 slcan0` → `ifconfig slcan0 up` → (one-shot) `xela_conf -d socketcan -c slcan0` → `xela_server -f /etc/xela/xServ.ini -p 5000 --noros` (we omit `--ip` since v1.7.6 ignores it; the server binds to the LAN IP and our client auto-resolves to the same one).
 - **Python client dependency:** `websocket-client` (manual p. 9 prereq).
 
 ## Decisions
@@ -84,7 +84,7 @@ class TactileSensor(ABC):
 @TactileSensorConfig.register_subclass("xela")
 class XelaTactileConfig(TactileSensorConfig):
     type: str = "xela"
-    host: str = "127.0.0.1"
+    host: str = "auto"  # resolved at connect time to the host's primary LAN IP
     port: int = 5000
     sensor_id: str = "1"
     model: str = "XR1944"
@@ -143,16 +143,19 @@ sudo slcand -o -s8 -t hw -S 3000000 /dev/ttyUSB0 slcan0
 sudo ifconfig slcan0 up
 
 # Terminal X — start XELA server (leave running)
-/etc/xela/xela_server -f /etc/xela/xServ.ini --ip 127.0.0.1 -p 5000 --noros
+/etc/xela/xela_server -f /etc/xela/xServ.ini -p 5000 --noros &
+# Note: --ip is omitted intentionally — the AppImage ignores it and binds to the
+# host's primary NIC IP. Terminate later with `kill $!` or `pkill -f xela_server`.
 
 # Terminal Y — verify the stream is alive (optional)
-python -m lerobot.tactile.xela.xela_tactile --host 127.0.0.1 --port 5000 --sensor-id 1
+python -m lerobot.tactile.xela.xela_tactile --port 5000 --sensor-id 1
+# `--host` defaults to "auto" → resolves to the same LAN IP xela_server bound to.
 
 # Terminal Z — teleop or record with tactile
 lerobot-record \
   --robot.type=bi_yam_follower \
   --robot.tactile_sensors='{
-     right_finger_r: {"type":"xela","host":"127.0.0.1","port":5000,
+     right_finger_r: {"type":"xela","port":5000,
                   "sensor_id":"1","model":"XR1944"}
   }' \
   --teleop.type=bi_yam_leader \

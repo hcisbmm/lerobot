@@ -866,10 +866,12 @@ python src/lerobot/robots/bi_yam_follower/run_xela_server.py
 python src/lerobot/robots/bi_yam_follower/run_bimanual_yam_server.py
 
 # Terminal C — record with tactile included
+# `host` is omitted because the default "auto" resolves to the same LAN IP
+# xela_server bound to (v1.7.6 ignores --ip and binds to the primary NIC).
 lerobot-record \
   --robot.type=bi_yam_follower \
   --robot.tactile_sensors='{
-     right_finger_r: {"type":"xela","host":"127.0.0.1","port":5000,
+     right_finger_r: {"type":"xela","port":5000,
                       "sensor_id":"1","model":"XR1944"}
   }' \
   --teleop.type=bi_yam_leader \
@@ -878,6 +880,16 @@ lerobot-record \
   --dataset.single_task="Pick and place with tactile feedback" \
   --display_data=true \
   --fps=30
+```
+
+### Stopping `xela_server` after the session
+
+`Ctrl+C` doesn't kill a backgrounded (`&`) process. Use one of:
+
+```bash
+kill $!                  # if you launched it via `&` in this shell
+pkill -f xela_server     # SIGTERM by name
+pkill -9 xela_server     # SIGKILL fallback (manual's recommendation)
 ```
 
 ### Recorded keys
@@ -895,6 +907,25 @@ the sensor config; a sibling `observation.tactile.right_finger_r.cal` key appear
 `observation.tactile.<arm>_finger_<side>` where `arm ∈ {left, right}` and
 `side ∈ {l, r}` (which jaw of the parallel gripper). Add additional entries to
 `--robot.tactile_sensors='{...}'` and the keys appear in the dataset automatically.
+
+### Inspecting tactile data after recording
+
+Use [`examples/tactile/inspect_tactile_dataset.py`](../../../../examples/tactile/inspect_tactile_dataset.py)
+to verify schema and visualise the recorded data:
+
+```bash
+# Headless sanity check — prints schema + per-axis (X, Y, Z) min/max/mean/std
+uv run python examples/tactile/inspect_tactile_dataset.py \
+  --repo-id ${HF_USER}/bimanual-yam-tactile-demo --episode 0
+
+# Animated 4×4 heatmap of contact magnitude across the episode
+uv run python examples/tactile/inspect_tactile_dataset.py \
+  --repo-id ${HF_USER}/bimanual-yam-tactile-demo --episode 0 --mode heatmap
+
+# Run all views in sequence (summary, time-series, heatmap, single-frame)
+uv run python examples/tactile/inspect_tactile_dataset.py \
+  --repo-id ${HF_USER}/bimanual-yam-tactile-demo --episode 0 --mode all
+```
 
 ## References
 

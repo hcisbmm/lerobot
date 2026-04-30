@@ -2221,3 +2221,43 @@ After writing this plan, I checked it against the spec:
 - Observation key `observation.tactile.right_finger_r` is consistent across `_tactile_ft`, `get_observation`, the integration test assertions, and the README example.
 
 No inconsistencies found.
+
+---
+
+## Post-implementation amendments (2026-04-30)
+
+The plan's task code blocks above represent the plan *as written* before execution. Three corrections were made during execution after smoke-testing against real XR1944 hardware revealed limitations of XELA Server v1.7.6 build 158509. The shipped code (and the `tactile` branch) reflects these corrections; the originals are kept here as historical record.
+
+### A. `XelaTactileConfig.host` default: `"127.0.0.1"` → `"auto"`
+
+**Why:** the `xela_server` AppImage v1.7.6 build 158509 silently ignores the `--ip` flag and always binds to the host's primary NIC IP (e.g. `192.168.x.x`). Pinning the client to `127.0.0.1` would never connect on this machine.
+
+**Fix:** default `host` to `"auto"`, resolved at connect time by `_resolve_host()` using a UDP-route trick (the same heuristic XELA uses internally). Existing IPs/hostnames pass through unchanged.
+
+**Files touched:** `src/lerobot/tactile/xela/configuration_xela.py`, `src/lerobot/tactile/xela/xela_tactile.py`, `tests/tactile/test_xela_config.py`, `tests/tactile/test_xela_sensor.py` (added `_wait_for_first` helper to handle the new resolve-step race), commits `c030ab03` and `d4714064`.
+
+### B. Drop `--ip` from `run_xela_server.py` invocations
+
+**Why:** same as above. Passing the flag was misleading (suggested it worked) and Task 11's wrapper used `-i` (the short form), which xela_server's AppImage doesn't recognise either. The only effect of either was a silent no-op.
+
+**Fix:** `run_xela_server.py` now omits `--ip` unless the operator forces one explicitly. README/spec invocations updated to drop the flag and explain the quirk.
+
+**Files touched:** `src/lerobot/robots/bi_yam_follower/run_xela_server.py`, `src/lerobot/tactile/xela/README.md`, `src/lerobot/robots/bi_yam_follower/README.md`, commit `c030ab03`.
+
+### C. Graceful WS-close demoted to INFO
+
+**Why:** the smoke test surfaced a noisy `WARNING: XELA WS closed (status=None, msg=None)` on every clean `disconnect()`. Warnings should be reserved for unexpected drops (the reconnect-worthy case).
+
+**Fix:** `_on_close` keys off `self._stop.is_set()` — INFO when we asked for the close, WARNING otherwise. Two regression tests added (`test_graceful_close_logs_info_not_warning`, `test_unexpected_close_logs_warning`).
+
+**Files touched:** `src/lerobot/tactile/xela/xela_tactile.py`, `tests/tactile/test_xela_sensor.py`, commit `275e6298`.
+
+### D. Inspection utility added (out of original plan scope)
+
+**Why:** Task 13 left "how to examine recorded data" implicit. After hardware validation we packaged the demo snippets into a runnable utility so future contributors don't have to re-derive them.
+
+**Files touched:** `examples/tactile/inspect_tactile_dataset.py`, `examples/tactile/README.md` (new), `src/lerobot/tactile/xela/README.md` and `src/lerobot/robots/bi_yam_follower/README.md` updated with cross-references.
+
+### Final test count: 44/44 (was 40/40 in the original plan)
+
+Two `_resolve_host` tests + two WS-close logging assertion tests landed in amendments A and C.
