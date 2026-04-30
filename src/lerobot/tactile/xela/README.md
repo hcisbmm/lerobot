@@ -50,7 +50,9 @@ xela_conf -d socketcan -c slcan0    # one-shot, writes /etc/xela/xServ.ini
 
 # (3) Start the server (leave running)
 python src/lerobot/robots/bi_yam_follower/run_xela_server.py
-# or directly: /etc/xela/xela_server -f /etc/xela/xServ.ini -i 127.0.0.1 -p 5000 --noros
+# or directly: /etc/xela/xela_server -f /etc/xela/xServ.ini --ip 127.0.0.1 -p 5000 --noros
+# (NOTE: must use long --ip; the short -i is silently ignored by xela_server v1.7.6
+#  and the daemon falls back to the first NIC IP, e.g. 192.168.x.x.)
 
 # (4) Smoke-test the stream from Python
 python -m lerobot.tactile.xela.xela_tactile --host 127.0.0.1 --port 5000 --sensor-id 1

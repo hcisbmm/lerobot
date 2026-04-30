@@ -23,7 +23,7 @@ LeRobot's `BiYamFollower` records joint state, effort, and camera frames. The la
   ```
   `data` is comma-separated, leading-zero-stripped hex, length `3 * taxels` (X,Y,Z per taxel).
 - **First message:** `{"message":"Welcome", ...}` — must be skipped.
-- **Bring-up:** `slcand -o -s8 -t hw -S 3000000 /dev/ttyUSB0 slcan0` → `ifconfig slcan0 up` → (one-shot) `xela_conf -d socketcan -c slcan0` → `xela_server -f /etc/xela/xServ.ini -i 127.0.0.1 -p 5000 --noros`.
+- **Bring-up:** `slcand -o -s8 -t hw -S 3000000 /dev/ttyUSB0 slcan0` → `ifconfig slcan0 up` → (one-shot) `xela_conf -d socketcan -c slcan0` → `xela_server -f /etc/xela/xServ.ini --ip 127.0.0.1 -p 5000 --noros`.
 - **Python client dependency:** `websocket-client` (manual p. 9 prereq).
 
 ## Decisions
@@ -143,7 +143,7 @@ sudo slcand -o -s8 -t hw -S 3000000 /dev/ttyUSB0 slcan0
 sudo ifconfig slcan0 up
 
 # Terminal X — start XELA server (leave running)
-/etc/xela/xela_server -f /etc/xela/xServ.ini -i 127.0.0.1 -p 5000 --noros
+/etc/xela/xela_server -f /etc/xela/xServ.ini --ip 127.0.0.1 -p 5000 --noros
 
 # Terminal Y — verify the stream is alive (optional)
 python -m lerobot.tactile.xela.xela_tactile --host 127.0.0.1 --port 5000 --sensor-id 1

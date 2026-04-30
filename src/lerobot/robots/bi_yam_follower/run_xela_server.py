@@ -54,8 +54,10 @@ def main() -> int:
               f"Run `xela_conf -d socketcan -c slcan0` first.", file=sys.stderr)
         return 1
 
+    # XELA's AppImage CLI requires LONG forms (--ip, --port) — short -i / -p are
+    # silently ignored and the server falls back to its default (first NIC IP).
     cmd = [str(args.xela_bin), "-f", str(args.config),
-           "-i", args.ip, "-p", str(args.port)]
+           "--ip", args.ip, "-p", str(args.port)]
     if args.noros:
         cmd.append("--noros")
 
