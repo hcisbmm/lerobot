@@ -208,7 +208,12 @@ class XelaTactileSensor(TactileSensor):
         self._frame_event.set()
 
     def _on_close(self, ws, status, msg):  # noqa: ANN001
-        logger.warning("XELA WS closed (status=%s, msg=%s)", status, msg)
+        # Demote to INFO when we asked for the close (graceful disconnect()).
+        # Only WARNING when the server-side or transport closed unexpectedly.
+        if self._stop.is_set():
+            logger.info("XELA WS closed cleanly (status=%s)", status)
+        else:
+            logger.warning("XELA WS closed unexpectedly (status=%s, msg=%s)", status, msg)
 
     def _on_error(self, ws, error):  # noqa: ANN001
         logger.warning("XELA WS error: %s", error)

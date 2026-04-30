@@ -175,6 +175,55 @@ def test_shape_and_dtype(patched_ws_app):
     assert sensor.dtype == np.float32
 
 
+def test_graceful_close_logs_info_not_warning(patched_ws_app, caplog):
+    """When disconnect() triggered the close, _on_close must use INFO, not WARNING."""
+    import logging
+
+    sensor = XelaTactileSensor(XelaTactileConfig(receive_timeout_s=0.5))
+    sensor.connect()
+    fake = _wait_for_first(patched_ws_app)
+    fake.run_forever_called.wait(timeout=2.0)
+
+    with caplog.at_level(logging.INFO, logger="lerobot.tactile.xela.xela_tactile"):
+        sensor.disconnect()  # sets _stop, then closes WS — graceful
+
+    close_records = [r for r in caplog.records if "WS closed" in r.message]
+    assert close_records, "expected at least one WS-closed log entry"
+    # All graceful-close records must be INFO, never WARNING.
+    for rec in close_records:
+        assert rec.levelno == logging.INFO, (
+            f"graceful disconnect logged at {rec.levelname}: {rec.message!r}"
+        )
+
+
+def test_unexpected_close_logs_warning(patched_ws_app, caplog):
+    """When the server side closes (not us), _on_close must use WARNING."""
+    import logging
+
+    sensor = XelaTactileSensor(
+        XelaTactileConfig(receive_timeout_s=0.5, reconnect_backoff_s=10.0)  # don't reconnect
+    )
+    sensor.connect()
+    fake = _wait_for_first(patched_ws_app)
+    fake.run_forever_called.wait(timeout=2.0)
+
+    with caplog.at_level(logging.INFO, logger="lerobot.tactile.xela.xela_tactile"):
+        # Simulate a server-initiated close: drive run_forever to return without setting _stop.
+        fake.close_called = True
+        # The reader thread observes the close and calls _on_close. Wait briefly.
+        time.sleep(0.05)
+
+    sensor.disconnect()
+
+    unexpected_records = [
+        r for r in caplog.records
+        if "WS closed unexpectedly" in r.message
+    ]
+    assert unexpected_records, "expected at least one unexpected-close warning"
+    for rec in unexpected_records:
+        assert rec.levelno == logging.WARNING
+
+
 def test_resolve_host_passthrough():
     from lerobot.tactile.xela.xela_tactile import _resolve_host
 
