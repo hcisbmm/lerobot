@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 
 from lerobot.cameras.configs import CameraConfig, Cv2Rotation
 from lerobot.cameras.opencv.configuration_opencv import OpenCVCameraConfig
+from lerobot.tactile.configs import TactileSensorConfig
 
 from ..config import RobotConfig
 
@@ -50,6 +51,10 @@ class BiYamFollowerConfig(RobotConfig):
     # Leave both None to keep the camera's auto-exposure behaviour.
     palm_camera_auto_exposure: int | None = None
     palm_camera_exposure: float | None = None
+
+    # Tactile sensors (e.g., XELA pads). Keyed by descriptive name (e.g., "right_finger_r").
+    # Each entry is a TactileSensorConfig subclass — see lerobot.tactile.configs.
+    tactile_sensors: dict[str, TactileSensorConfig] = field(default_factory=dict)
 
     # Cameras (shared between both arms)
     # When use_palm_camera=true, palm cameras are merged with any explicitly provided cameras
