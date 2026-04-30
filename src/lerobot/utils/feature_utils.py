@@ -69,7 +69,12 @@ def hw_to_dataset_features(
         for key, ftype in hw_features.items()
         if ftype is float or (isinstance(ftype, PolicyFeature) and ftype.type != FeatureType.VISUAL)
     }
-    cam_fts = {key: shape for key, shape in hw_features.items() if isinstance(shape, tuple)}
+    cam_fts = {
+        key: shape for key, shape in hw_features.items() if isinstance(shape, tuple) and len(shape) == 3
+    }
+    vec_fts = {
+        key: shape for key, shape in hw_features.items() if isinstance(shape, tuple) and len(shape) == 1
+    }
 
     if joint_fts and prefix == ACTION:
         features[prefix] = {
@@ -90,6 +95,15 @@ def hw_to_dataset_features(
             "dtype": "video" if use_video else "image",
             "shape": shape,
             "names": ["height", "width", "channels"],
+        }
+
+    # 1D non-image tuples (e.g., tactile arrays) are pre-packed vectors with
+    # their own key — emitted unchanged so the original obs key in values[] matches.
+    for key, shape in vec_fts.items():
+        features[key] = {
+            "dtype": "float32",
+            "shape": shape,
+            "names": [str(i) for i in range(int(shape[0]))],
         }
 
     _validate_feature_names(features)
@@ -118,7 +132,12 @@ def build_dataset_frame(
         if key in DEFAULT_FEATURES or not key.startswith(prefix):
             continue
         elif ft["dtype"] == "float32" and len(ft["shape"]) == 1:
-            frame[key] = np.array([values[name] for name in ft["names"]], dtype=np.float32)
+            # Pre-packed 1D arrays (e.g., tactile) live in values under the full key;
+            # bundled state vectors (observation.state) are gathered from named scalars.
+            if key in values:
+                frame[key] = np.asarray(values[key], dtype=np.float32)
+            else:
+                frame[key] = np.array([values[name] for name in ft["names"]], dtype=np.float32)
         elif ft["dtype"] in ["image", "video"]:
             frame[key] = values[key.removeprefix(f"{prefix}.images.")]
 
