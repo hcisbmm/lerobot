@@ -241,3 +241,61 @@ def test_resolve_host_auto_returns_an_ipv4():
     for p in parts:
         n = int(p)
         assert 0 <= n <= 255
+
+
+def test_seq_reset_on_reconnect(patched_ws_app):
+    """After server restart with seq counter reset, new frames must be accepted.
+
+    Regression: `_last_seq` accumulating across reconnects caused every
+    post-restart frame (whose `xela_server` seq starts back near 0) to be
+    silently dropped as "out-of-order", freezing async_read() at the last
+    pre-disconnect frame indefinitely.
+    """
+    sensor = XelaTactileSensor(
+        XelaTactileConfig(receive_timeout_s=2.0, reconnect_backoff_s=0.05)
+    )
+    sensor.connect()
+    fake1 = _wait_for_first(patched_ws_app)
+    fake1.run_forever_called.wait(timeout=2.0)
+    fake1.on_message(fake1, _xr1944_msg(seq=10000, value=0x0010))
+    np.testing.assert_array_equal(
+        sensor.async_read(), np.full(48, 0x10, dtype=np.float32)
+    )
+
+    # Simulate server restart: close the current WS, wait for the reader to
+    # spawn a new WebSocketApp, then deliver a low-seq frame on the new one.
+    fake1.close_called = True
+    deadline = time.time() + 3.0
+    while len(patched_ws_app) < 2 and time.time() < deadline:
+        time.sleep(0.01)
+    assert len(patched_ws_app) >= 2, "reader did not reconnect"
+    fake2 = patched_ws_app[1]
+    fake2.run_forever_called.wait(timeout=2.0)
+    fake2.on_message(fake2, _xr1944_msg(seq=0, value=0x0042))
+
+    # The new frame must be accepted, NOT dropped as out-of-order.
+    np.testing.assert_array_equal(
+        sensor.async_read(), np.full(48, 0x42, dtype=np.float32)
+    )
+    sensor.disconnect()
+
+
+def test_stale_frame_warning_after_idle(patched_ws_app, caplog):
+    """async_read() logs a WARNING when the last frame is older than 1 s."""
+    import logging
+
+    sensor = XelaTactileSensor(
+        XelaTactileConfig(receive_timeout_s=2.0, reconnect_backoff_s=10.0)
+    )
+    sensor.connect()
+    fake = _wait_for_first(patched_ws_app)
+    fake.run_forever_called.wait(timeout=2.0)
+    # ts=1.0 from epoch — ancient by definition; staleness check fires
+    fake.on_message(fake, _xr1944_msg(seq=1, value=0x0007, ts=1.0))
+
+    with caplog.at_level(logging.WARNING, logger="lerobot.tactile.xela.xela_tactile"):
+        _ = sensor.async_read()
+
+    stale_records = [r for r in caplog.records if "stale" in r.message]
+    assert stale_records, "expected at least one staleness warning"
+    sensor.disconnect()

@@ -44,6 +44,11 @@ def _resolve_host(host: str) -> str:
     Mirrors xela_server's heuristic: it binds to the IP the OS would use to
     reach the public internet (typically the LAN IP, e.g. 192.168.x.x).
     Anything else is returned unchanged.
+
+    On an air-gapped host (no default route to a public IP), falls back to
+    127.0.0.1 with a one-shot WARNING so the operator can attribute a
+    subsequent connect TimeoutError to the *real* cause (host unreachable)
+    rather than to xela_server itself.
     """
     if host != "auto":
         return host
@@ -51,7 +56,13 @@ def _resolve_host(host: str) -> str:
     try:
         s.connect(("8.8.8.8", 80))  # no packet is actually sent
         return s.getsockname()[0]
-    except OSError:
+    except OSError as e:
+        logger.warning(
+            "XELA host=auto failed to resolve outbound-route IP (%s); "
+            "falling back to 127.0.0.1. If xela_server bound to a LAN IP, set "
+            "host explicitly in XelaTactileConfig (e.g. host='192.168.1.79').",
+            e,
+        )
         return "127.0.0.1"
     finally:
         s.close()
@@ -113,8 +124,10 @@ class XelaTactileSensor(TactileSensor):
         self._thread = threading.Thread(
             target=self._reader_loop, name=f"xela-{self.config.host}:{self.config.port}", daemon=True
         )
-        self._connected = True
+        # Set is_connected only AFTER thread.start() succeeds — if spawn fails,
+        # is_connected must not lie to BiYamFollower's readiness check.
         self._thread.start()
+        self._connected = True
 
     def disconnect(self) -> None:
         self._connected = False
@@ -161,6 +174,12 @@ class XelaTactileSensor(TactileSensor):
             logger.info("XELA host=%r resolved to %s", self.config.host, resolved_host)
         url = f"ws://{resolved_host}:{self.config.port}"
         while not self._stop.is_set():
+            # Reset the sequence-monotonicity guard per connection: a fresh
+            # `xela_server` (operator-restarted mid-session, or recovered after a
+            # crash) emits seq=0,1,2,… which would all be <= the old _last_seq
+            # and get silently dropped, causing async_read() to hold the stale
+            # last-good-frame forever.
+            self._last_seq = -1
             try:
                 self._ws_app = websocket.WebSocketApp(
                     url,
