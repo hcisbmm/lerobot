@@ -117,7 +117,9 @@ _can_available = is_package_available("python-can", "can")
 _portal_available = is_package_available("portal")
 _websocket_client_available = is_package_available("websocket-client", import_name="websocket")
 _unitree_sdk_available = is_package_available("unitree-sdk2py", "unitree_sdk2py")
-_pyrealsense2_available = is_package_available("pyrealsense2")
+_pyrealsense2_available = is_package_available("pyrealsense2") or is_package_available(
+    "pyrealsense2-macosx", import_name="pyrealsense2"
+)
 _zmq_available = is_package_available("pyzmq", import_name="zmq")
 _hebi_available = is_package_available("hebi-py", import_name="hebi")
 _teleop_available = is_package_available("teleop")
