@@ -28,11 +28,15 @@ class MockTactileConfig(TactileSensorConfig):
     """Synthetic tactile sensor for CI and offline development.
 
     Generates deterministic-per-seed sinusoidal frames of shape ``(num_taxels * axes,)``.
+    Set ``provides_calibrated=True`` to also surface a synthetic calibrated
+    signal (cosine waveform, scaled to 0.001 units to mimic Newtons) — useful
+    for testing downstream consumers of the calibrated path without hardware.
     """
 
     num_taxels: int = 16
     axes: int = 3
     seed: int = 0
+    provides_calibrated: bool = False
 
 
 class MockTactileSensor(TactileSensor):
@@ -80,3 +84,20 @@ class MockTactileSensor(TactileSensor):
         self._step += 1
         self._latest_timestamp = time.time()
         return frame
+
+    @property
+    def provides_calibrated(self) -> bool:
+        return self.config.provides_calibrated
+
+    def async_read_calibrated(self) -> NDArray[np.float32]:
+        if not self.config.provides_calibrated:
+            raise NotImplementedError(
+                "MockTactileSensor.async_read_calibrated() requires "
+                "provides_calibrated=True in MockTactileConfig."
+            )
+        if not self._connected:
+            raise RuntimeError("MockTactileSensor is not connected; call connect() first.")
+        # Cosine instead of sine, scaled to 0.001 — distinguishable from raw
+        # so consumers can verify the calibrated path is wired correctly.
+        t = self._step / 100.0
+        return (np.cos(2 * np.pi * t + self._phase, dtype=np.float32) * 0.001).astype(np.float32)

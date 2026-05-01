@@ -45,11 +45,11 @@ class XelaTactileConfig(TactileSensorConfig):
     port: int = 5000
     sensor_id: str = "1"
     model: str = "XR1944"
-    # NOTE (v1): `use_calibrated=True` is currently a no-op — the calibrated
-    # field is captured by the reader but not surfaced via async_read() or
-    # written to the dataset. The flag is preserved for forward-compatibility
-    # with a planned v2 that emits an `observation.tactile.<name>.cal` sibling
-    # key. Setting it True today logs a one-shot warning at construct time.
+    # When True, BiYamFollower emits a sibling `observation.tactile.<name>.cal`
+    # column populated from each frame's `calibrated` field (XCAL-calibrated
+    # forces in Newtons). If XCAL files are not installed at the xela_server
+    # side, the `.cal` column is filled with zeros and a one-shot ERROR is
+    # logged the first time a null-calibrated frame is seen.
     use_calibrated: bool = False
     tare_on_connect: bool = False
     reconnect_backoff_s: float = 0.5

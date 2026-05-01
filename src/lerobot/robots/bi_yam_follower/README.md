@@ -1098,13 +1098,14 @@ fallbacks if SIGTERM hangs.
 | --- | --- | --- | --- |
 | `observation.tactile.right_finger_r` | `(48,)` | `float32` | Raw uint16 magnetic-field readings cast losslessly to float32 (16 taxels × X/Y/Z). |
 
-**Calibrated forces (planned, not yet wired):** the `XelaTactileConfig.use_calibrated`
-flag is preserved for forward-compatibility with a planned v2 that will emit an
-`observation.tactile.right_finger_r.cal` sibling float32 column when XCAL files
-are installed. v1 captures the calibrated field internally but does **not** route
-it to `async_read()` or the dataset writer; setting `use_calibrated=True` today
-logs a one-shot warning and otherwise has no effect. Raw uint16 readings are
-recorded regardless.
+**Calibrated forces (XCAL):** set `"use_calibrated": true` on the sensor
+config to additionally record `observation.tactile.right_finger_r.cal` —
+a parallel `(48,)` float32 column populated from each frame's `calibrated`
+field (XCAL-calibrated forces in Newtons). If the vendor's `.xcal` files
+are not installed at the `xela_server` side, the column is filled with
+zeros and a one-shot `ERROR` is logged on the first null-calibrated frame
+so the gap is visible in the logs without breaking recording. Raw uint16
+readings are always recorded regardless of this flag.
 
 ### Naming convention for adding more sensors
 

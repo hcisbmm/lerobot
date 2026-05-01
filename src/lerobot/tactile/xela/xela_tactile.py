@@ -81,21 +81,7 @@ class XelaTactileSensor(TactileSensor):
         super().__init__(config)
         self.config: XelaTactileConfig = config
         self._shape = config.expected_shape  # validate model name early
-
-        # `use_calibrated=True` captures XCAL forces from each frame into
-        # `_latest_cal`, but v1 does NOT plumb them through to async_read() or
-        # emit an `observation.tactile.<name>.cal` sibling key. Setting the
-        # flag has no observable effect on the recorded dataset today; the
-        # plumbing is tracked for v2 (when XCAL files are part of bring-up).
-        # Warn so operators aren't silently misled.
-        if config.use_calibrated:
-            logger.warning(
-                "XelaTactileConfig.use_calibrated=True has no effect in v1 — the "
-                "calibrated field is captured internally but not exposed via "
-                "async_read() or written to the dataset. Set this flag to False "
-                "until XCAL plumbing lands; raw uint16 readings are recorded "
-                "regardless. (Tracked as PR #1 review item #2.)"
-            )
+        self._cal_missing_logged: bool = False  # one-shot guard for the XCAL-missing error
 
         self._connected: bool = False
         self._stop = threading.Event()
@@ -125,6 +111,46 @@ class XelaTactileSensor(TactileSensor):
     @property
     def latest_timestamp(self) -> float | None:
         return self._latest_ts
+
+    @property
+    def provides_calibrated(self) -> bool:
+        return self.config.use_calibrated
+
+    def async_read_calibrated(self) -> NDArray[np.float32]:
+        if not self.config.use_calibrated:
+            raise NotImplementedError(
+                "XelaTactileSensor.async_read_calibrated() requires "
+                "use_calibrated=True in XelaTactileConfig."
+            )
+        if not self._connected and self._latest is None:
+            raise RuntimeError("XelaTactileSensor is not connected; call connect() first.")
+        # Wait for the first frame the same way async_read() does, so the
+        # caller gets a clear TimeoutError instead of a silent NotImplementedError
+        # if xela_server is unreachable.
+        if self._latest is None:
+            if not self._frame_event.wait(timeout=self.config.receive_timeout_s):
+                raise TimeoutError(
+                    f"No XELA frame received within {self.config.receive_timeout_s:.2f}s. "
+                    f"Is xela_server running on {self.config.host}:{self.config.port}?"
+                )
+        with self._lock:
+            cal = None if self._latest_cal is None else self._latest_cal.copy()
+        if cal is None:
+            # A frame arrived but `calibrated` was null — XCAL files are not
+            # installed at the server side. Log once and return a zero vector
+            # so the dataset schema stays consistent across the episode.
+            if not self._cal_missing_logged:
+                logger.error(
+                    "XELA frame's `calibrated` field is null. XCAL files are not "
+                    "installed at the xela_server side; the .cal column will be "
+                    "filled with zeros for the rest of this session. Install the "
+                    "vendor-provided .xcal files in /etc/xela and restart "
+                    "xela_server, or set use_calibrated=False to drop the .cal "
+                    "column from the recording."
+                )
+                self._cal_missing_logged = True
+            return np.zeros(self._shape, dtype=np.float32)
+        return cal
 
     def connect(self) -> None:
         if not _websocket_client_available:

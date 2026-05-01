@@ -280,25 +280,64 @@ def test_seq_reset_on_reconnect(patched_ws_app):
     sensor.disconnect()
 
 
-def test_use_calibrated_logs_no_op_warning(caplog):
-    """v1 documents `use_calibrated=True` as a no-op; warn at construct time."""
+def test_provides_calibrated_default_false(patched_ws_app):
+    """Default config disables the calibrated path."""
+    sensor = XelaTactileSensor(XelaTactileConfig())  # use_calibrated=False
+    assert sensor.provides_calibrated is False
+    with pytest.raises(NotImplementedError):
+        sensor.async_read_calibrated()
+
+
+def test_async_read_calibrated_returns_xcal_floats(patched_ws_app):
+    """When the server delivers `calibrated`, async_read_calibrated returns it."""
+    sensor = XelaTactileSensor(
+        XelaTactileConfig(use_calibrated=True, receive_timeout_s=2.0)
+    )
+    sensor.connect()
+    fake = _wait_for_first(patched_ws_app)
+    fake.run_forever_called.wait(timeout=2.0)
+
+    cal_payload = [0.001 * i for i in range(48)]
+    sensor_block = {
+        "data": ",".join(f"{0:04X}" for _ in range(48)),
+        "sensor": "1",
+        "taxels": 16,
+        "model": "XR1944",
+        "calibrated": cal_payload,
+    }
+    fake.on_message(fake, json.dumps(
+        {"message": 1, "time": 1.0, "sensors": 1, "1": sensor_block}
+    ))
+
+    out = sensor.async_read_calibrated()
+    assert out.shape == (48,)
+    assert out.dtype == np.float32
+    np.testing.assert_allclose(out, np.asarray(cal_payload, dtype=np.float32))
+    assert sensor.provides_calibrated is True
+    sensor.disconnect()
+
+
+def test_async_read_calibrated_zero_fills_when_xcal_missing(patched_ws_app, caplog):
+    """If a frame arrives with `calibrated=null`, return zeros + log error once."""
     import logging
 
-    with caplog.at_level(logging.WARNING, logger="lerobot.tactile.xela.xela_tactile"):
-        XelaTactileSensor(XelaTactileConfig(use_calibrated=True))
-    no_op_records = [r for r in caplog.records if "no effect in v1" in r.message]
-    assert no_op_records, "expected a one-shot 'no effect in v1' warning"
-    assert no_op_records[0].levelno == logging.WARNING
+    sensor = XelaTactileSensor(
+        XelaTactileConfig(use_calibrated=True, receive_timeout_s=2.0)
+    )
+    sensor.connect()
+    fake = _wait_for_first(patched_ws_app)
+    fake.run_forever_called.wait(timeout=2.0)
+    fake.on_message(fake, _xr1944_msg(seq=1, value=0x0042))  # calibrated=null
 
+    with caplog.at_level(logging.ERROR, logger="lerobot.tactile.xela.xela_tactile"):
+        out1 = sensor.async_read_calibrated()
+        out2 = sensor.async_read_calibrated()  # second call: must NOT log again
 
-def test_use_calibrated_default_silent(caplog):
-    """Default `use_calibrated=False` must not emit the no-op warning."""
-    import logging
-
-    with caplog.at_level(logging.WARNING, logger="lerobot.tactile.xela.xela_tactile"):
-        XelaTactileSensor(XelaTactileConfig())  # default: use_calibrated=False
-    no_op_records = [r for r in caplog.records if "no effect in v1" in r.message]
-    assert not no_op_records, "default config must not log the no-op warning"
+    np.testing.assert_array_equal(out1, np.zeros(48, dtype=np.float32))
+    np.testing.assert_array_equal(out2, np.zeros(48, dtype=np.float32))
+    error_records = [r for r in caplog.records if "XCAL files are not installed" in r.message]
+    assert len(error_records) == 1, "expected exactly one (one-shot) XCAL-missing error"
+    sensor.disconnect()
 
 
 def test_stale_frame_warning_after_idle(patched_ws_app, caplog):

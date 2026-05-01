@@ -61,6 +61,25 @@ def test_factory_dispatches_to_mock_backend():
     assert isinstance(sensors["left"], MockTactileSensor)
 
 
+def test_mock_sensor_provides_calibrated_default_false():
+    sensor = MockTactileSensor(MockTactileConfig())
+    assert sensor.provides_calibrated is False
+    with pytest.raises(NotImplementedError):
+        sensor.async_read_calibrated()
+
+
+def test_mock_sensor_async_read_calibrated_when_enabled():
+    sensor = MockTactileSensor(MockTactileConfig(provides_calibrated=True))
+    sensor.connect()
+    assert sensor.provides_calibrated is True
+    cal = sensor.async_read_calibrated()
+    assert cal.shape == (48,)
+    assert cal.dtype == np.float32
+    # Sanity: cosine waveform scaled to ~0.001 — distinguishable from sine raw.
+    assert np.abs(cal).max() <= 0.0011
+    sensor.disconnect()
+
+
 def test_mock_sensor_latest_timestamp_after_read():
     sensor = MockTactileSensor(MockTactileConfig())
     sensor.connect()

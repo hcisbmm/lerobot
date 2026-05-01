@@ -76,6 +76,31 @@ class TactileSensor(abc.ABC):
         """
 
     @property
+    def provides_calibrated(self) -> bool:
+        """True if this sensor exposes a parallel calibrated reading.
+
+        When True, BiYamFollower (and any other consumer) will emit an additional
+        ``observation.tactile.<name>.cal`` column alongside the raw vector and
+        invoke :meth:`async_read_calibrated` on each tick.
+
+        Default: False. Backends opt in by overriding this property and
+        :meth:`async_read_calibrated`.
+        """
+        return False
+
+    def async_read_calibrated(self) -> NDArray[np.float32]:
+        """Return the latest calibrated reading, non-blocking.
+
+        Same shape as :meth:`async_read` but in backend-specific calibrated units
+        (e.g., Newtons after XCAL processing for XELA). The default implementation
+        raises ``NotImplementedError``; backends override together with
+        :attr:`provides_calibrated`.
+        """
+        raise NotImplementedError(
+            f"{self.__class__.__name__} does not provide a calibrated reading"
+        )
+
+    @property
     def latest_timestamp(self) -> float | None:
         """Wall-clock timestamp (seconds since epoch) of the latest frame, or None."""
         return None

@@ -209,11 +209,18 @@ class BiYamFollower(Robot):
 
     @property
     def _tactile_ft(self) -> dict[str, tuple]:
-        """Tactile observation feature shapes, keyed as `observation.tactile.<name>`."""
-        return {
-            f"observation.tactile.{name}": s.shape
-            for name, s in self.tactile_sensors.items()
-        }
+        """Tactile observation feature shapes.
+
+        Keyed as ``observation.tactile.<name>`` for the raw vector. Sensors that
+        opt into a calibrated path (``provides_calibrated=True``) also emit a
+        sibling ``observation.tactile.<name>.cal`` column of the same shape.
+        """
+        features: dict[str, tuple] = {}
+        for name, s in self.tactile_sensors.items():
+            features[f"observation.tactile.{name}"] = s.shape
+            if s.provides_calibrated:
+                features[f"observation.tactile.{name}.cal"] = s.shape
+        return features
 
     @cached_property
     def observation_features(self) -> dict[str, type | tuple]:
@@ -385,8 +392,11 @@ class BiYamFollower(Robot):
             logger.debug(f"{self} read all cameras: {dt_ms:.1f}ms")
 
         # Tactile reads — each backend's async_read is non-blocking (last-good-frame on outage).
+        # When the sensor advertises a calibrated path, also emit the sibling .cal column.
         for name, sensor in self.tactile_sensors.items():
             obs_dict[f"observation.tactile.{name}"] = sensor.async_read()
+            if sensor.provides_calibrated:
+                obs_dict[f"observation.tactile.{name}.cal"] = sensor.async_read_calibrated()
 
         return obs_dict
 
