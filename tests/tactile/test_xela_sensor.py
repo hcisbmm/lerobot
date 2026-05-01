@@ -317,6 +317,49 @@ def test_async_read_calibrated_returns_xcal_floats(patched_ws_app):
     sensor.disconnect()
 
 
+def test_async_read_calibrated_warning_rearms_after_xcal_recovers(patched_ws_app, caplog):
+    """If XCAL flaps (present → missing → present → missing), each missing
+    stretch should log exactly once.
+    """
+    import logging
+
+    sensor = XelaTactileSensor(
+        XelaTactileConfig(use_calibrated=True, receive_timeout_s=2.0)
+    )
+    sensor.connect()
+    fake = _wait_for_first(patched_ws_app)
+    fake.run_forever_called.wait(timeout=2.0)
+
+    def _frame(seq, calibrated):
+        sensor_block = {
+            "data": ",".join(f"{0:04X}" for _ in range(48)),
+            "sensor": "1",
+            "taxels": 16,
+            "model": "XR1944",
+            "calibrated": calibrated,
+        }
+        return json.dumps(
+            {"message": seq, "time": 1.0, "sensors": 1, "1": sensor_block}
+        )
+
+    with caplog.at_level(logging.ERROR, logger="lerobot.tactile.xela.xela_tactile"):
+        # Stretch 1: XCAL missing → one ERROR
+        fake.on_message(fake, _frame(seq=1, calibrated=None))
+        sensor.async_read_calibrated()
+        # XCAL recovers
+        fake.on_message(fake, _frame(seq=2, calibrated=[0.5] * 48))
+        sensor.async_read_calibrated()
+        # Stretch 2: XCAL missing again → must log a SECOND ERROR
+        fake.on_message(fake, _frame(seq=3, calibrated=None))
+        sensor.async_read_calibrated()
+
+    error_records = [r for r in caplog.records if "XCAL files are not installed" in r.message]
+    assert len(error_records) == 2, (
+        f"expected 2 ERROR logs (one per missing-stretch), got {len(error_records)}"
+    )
+    sensor.disconnect()
+
+
 def test_async_read_calibrated_zero_fills_when_xcal_missing(patched_ws_app, caplog):
     """If a frame arrives with `calibrated=null`, return zeros + log error once."""
     import logging

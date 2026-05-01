@@ -265,6 +265,11 @@ class XelaTactileSensor(TactileSensor):
             self._latest_ts = result.timestamp
             if self.config.tare_on_connect and self._tare_offset is None:
                 self._tare_offset = result.raw.copy()
+            # Re-arm the XCAL-missing warning if a calibrated frame arrives
+            # after a previous null-calibrated stretch — covers the rare flap
+            # where XCAL files come back online mid-session.
+            if result.calibrated is not None:
+                self._cal_missing_logged = False
         self._frame_event.set()
 
     def _on_close(self, ws, status, msg):  # noqa: ANN001
