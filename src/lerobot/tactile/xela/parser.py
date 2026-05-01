@@ -95,11 +95,9 @@ def parse_frame(raw_json: str, *, sensor_id: str, expected_model: str) -> ParseR
         )
 
     cal_field = sensor.get("calibrated")
-    calibrated: NDArray[np.float32] | None
-    if cal_field is None:
-        calibrated = None
-    else:
-        calibrated = np.asarray(cal_field, dtype=np.float32)
+    calibrated: NDArray[np.float32] | None = (
+        None if cal_field is None else np.asarray(cal_field, dtype=np.float32)
+    )
 
     return ParseResult(
         seq=int(payload["message"]),

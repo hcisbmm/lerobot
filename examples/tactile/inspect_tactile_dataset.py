@@ -75,9 +75,7 @@ def _stack_tactile(ds: LeRobotDataset, key: str) -> np.ndarray:
 
 
 def _camera_keys(ds: LeRobotDataset) -> list[str]:
-    return sorted(
-        k for k in ds.meta.features if k.startswith("observation.images.")
-    )
+    return sorted(k for k in ds.meta.features if k.startswith("observation.images."))
 
 
 def cmd_summary(ds: LeRobotDataset, key: str) -> None:
@@ -100,12 +98,13 @@ def cmd_summary(ds: LeRobotDataset, key: str) -> None:
         per_axis = arr.reshape(arr.shape[0], taxels, AXES_PER_TAXEL)
         for axis_idx, axis_name in enumerate(("X", "Y", "Z")):
             slab = per_axis[:, :, axis_idx]
-            print(f"  axis {axis_name}: "
-                  f"min={slab.min():8.1f} max={slab.max():8.1f} "
-                  f"mean={slab.mean():8.1f} std={slab.std():7.2f}")
+            print(
+                f"  axis {axis_name}: "
+                f"min={slab.min():8.1f} max={slab.max():8.1f} "
+                f"mean={slab.mean():8.1f} std={slab.std():7.2f}"
+            )
     else:
-        print(f"  flat: min={arr.min():.1f} max={arr.max():.1f} "
-              f"mean={arr.mean():.1f} std={arr.std():.2f}")
+        print(f"  flat: min={arr.min():.1f} max={arr.max():.1f} mean={arr.mean():.1f} std={arr.std():.2f}")
     print("=" * 60)
 
 
@@ -115,23 +114,21 @@ def cmd_timeseries(ds: LeRobotDataset, key: str) -> None:
     arr = _stack_tactile(ds, key)
     if arr.shape[1] % AXES_PER_TAXEL != 0:
         raise ValueError(
-            f"channel count {arr.shape[1]} is not divisible by {AXES_PER_TAXEL}; "
-            "cannot split into X/Y/Z."
+            f"channel count {arr.shape[1]} is not divisible by {AXES_PER_TAXEL}; cannot split into X/Y/Z."
         )
-    T = arr.shape[0]
+    n_frames = arr.shape[0]
     taxels = arr.shape[1] // AXES_PER_TAXEL
-    per_axis = arr.reshape(T, taxels, AXES_PER_TAXEL)
-    ts = np.arange(T) / ds.fps
+    per_axis = arr.reshape(n_frames, taxels, AXES_PER_TAXEL)
+    ts = np.arange(n_frames) / ds.fps
 
     fig, axes = plt.subplots(3, 1, figsize=(12, 8), sharex=True)
     for axis_idx, name in enumerate(("X", "Y", "Z")):
         for taxel in range(taxels):
-            axes[axis_idx].plot(ts, per_axis[:, taxel, axis_idx],
-                                alpha=0.5, lw=0.8)
+            axes[axis_idx].plot(ts, per_axis[:, taxel, axis_idx], alpha=0.5, lw=0.8)
         axes[axis_idx].set_ylabel(f"{name}")
         axes[axis_idx].grid(True, alpha=0.3)
     axes[-1].set_xlabel("seconds")
-    fig.suptitle(f"{key} — {T} frames @ {ds.fps} Hz, {taxels} taxels")
+    fig.suptitle(f"{key} — {n_frames} frames @ {ds.fps} Hz, {taxels} taxels")
     plt.tight_layout()
     plt.show()
 
@@ -141,10 +138,10 @@ def cmd_heatmap(ds: LeRobotDataset, key: str) -> None:
     import matplotlib.pyplot as plt
 
     arr = _stack_tactile(ds, key)
-    if arr.shape[1] != DEFAULT_TAXELS_PER_AXIS ** 2 * AXES_PER_TAXEL:
+    if arr.shape[1] != DEFAULT_TAXELS_PER_AXIS**2 * AXES_PER_TAXEL:
         # Generic reshape for non-XR1944 layouts.
         taxels = arr.shape[1] // AXES_PER_TAXEL
-        side = int(round(taxels ** 0.5))
+        side = int(round(taxels**0.5))
         if side * side != taxels:
             raise ValueError(
                 f"channel count {arr.shape[1]} doesn't fit a square taxel layout; "
@@ -153,18 +150,17 @@ def cmd_heatmap(ds: LeRobotDataset, key: str) -> None:
     else:
         side = DEFAULT_TAXELS_PER_AXIS
 
-    T = arr.shape[0]
-    grid_3d = arr.reshape(T, side * side, AXES_PER_TAXEL)
+    n_frames = arr.shape[0]
+    grid_3d = arr.reshape(n_frames, side * side, AXES_PER_TAXEL)
     baseline = grid_3d[0]  # use first frame as zero
-    delta_mag = np.linalg.norm(grid_3d - baseline, axis=2).reshape(T, side, side)
+    delta_mag = np.linalg.norm(grid_3d - baseline, axis=2).reshape(n_frames, side, side)
 
     vmax = max(50.0, float(delta_mag.max()))
     fig, ax = plt.subplots(figsize=(5, 5))
-    im = ax.imshow(delta_mag[0], vmin=0, vmax=vmax,
-                   cmap="magma", interpolation="nearest")
+    im = ax.imshow(delta_mag[0], vmin=0, vmax=vmax, cmap="magma", interpolation="nearest")
     ax.set_title(f"{key} — |Δ from baseline|")
     fig.colorbar(im, ax=ax, label="‖Δ raw‖")
-    txt = ax.set_xlabel(f"frame 0 (0.00 s)")
+    txt = ax.set_xlabel("frame 0 (0.00 s)")
 
     def update(t):
         im.set_data(delta_mag[t])
@@ -173,7 +169,7 @@ def cmd_heatmap(ds: LeRobotDataset, key: str) -> None:
 
     interval_ms = max(10, int(1000 / ds.fps))
     ani = animation.FuncAnimation(  # noqa: F841 — ref keeps animation alive
-        fig, update, frames=range(T), interval=interval_ms, blit=False
+        fig, update, frames=range(n_frames), interval=interval_ms, blit=False
     )
     plt.show()
 
@@ -197,12 +193,14 @@ def cmd_frame(ds: LeRobotDataset, key: str) -> None:
 
     tactile = _as_numpy(sample[key])
     taxels = tactile.size // AXES_PER_TAXEL
-    side = int(round(taxels ** 0.5))
+    side = int(round(taxels**0.5))
     grid = tactile.reshape(taxels, AXES_PER_TAXEL)
     mag = np.linalg.norm(grid - grid.mean(axis=0), axis=1).reshape(side, side)
 
     fig, (a1, a2) = plt.subplots(1, 2, figsize=(12, 5))
-    a1.imshow(img); a1.set_title(f"{cam_key}, frame {mid}"); a1.axis("off")
+    a1.imshow(img)
+    a1.set_title(f"{cam_key}, frame {mid}")
+    a1.axis("off")
     h = a2.imshow(mag, cmap="magma", interpolation="nearest")
     a2.set_title(f"{key} |Δ from frame mean|")
     fig.colorbar(h, ax=a2)
@@ -211,19 +209,19 @@ def cmd_frame(ds: LeRobotDataset, key: str) -> None:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__,
-                                 formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--repo-id", required=True,
-                    help="HuggingFace repo id, e.g. 'HGLLL/bimanual-yam-tactile-demo'.")
-    ap.add_argument("--episode", type=int, default=0,
-                    help="Episode index to inspect (default: 0).")
-    ap.add_argument("--key", default=None,
-                    help="Specific tactile key (default: first one alphabetically).")
-    ap.add_argument("--mode", default="summary",
-                    choices=["summary", "timeseries", "heatmap", "frame", "all"],
-                    help="Inspection mode.")
-    ap.add_argument("--root", type=Path, default=None,
-                    help="Optional local dataset root override.")
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument(
+        "--repo-id", required=True, help="HuggingFace repo id, e.g. 'HGLLL/bimanual-yam-tactile-demo'."
+    )
+    ap.add_argument("--episode", type=int, default=0, help="Episode index to inspect (default: 0).")
+    ap.add_argument("--key", default=None, help="Specific tactile key (default: first one alphabetically).")
+    ap.add_argument(
+        "--mode",
+        default="summary",
+        choices=["summary", "timeseries", "heatmap", "frame", "all"],
+        help="Inspection mode.",
+    )
+    ap.add_argument("--root", type=Path, default=None, help="Optional local dataset root override.")
     args = ap.parse_args()
 
     ds = LeRobotDataset(
@@ -240,8 +238,7 @@ def main() -> int:
 
     key = args.key or keys[0]
     if key not in keys:
-        print(f"error: key {key!r} not in dataset. Available tactile keys: {keys}",
-              file=sys.stderr)
+        print(f"error: key {key!r} not in dataset. Available tactile keys: {keys}", file=sys.stderr)
         return 1
 
     print(f"loaded {args.repo_id} episode={args.episode} key={key}\n")

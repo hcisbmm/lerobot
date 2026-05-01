@@ -45,12 +45,19 @@ def test_default_latest_timestamp_returns_none():
         def connect(self) -> None: ...
         def disconnect(self) -> None: ...
         @property
-        def is_connected(self) -> bool: return False
+        def is_connected(self) -> bool:
+            return False
+
         @property
-        def shape(self): return (48,)
+        def shape(self):
+            return (48,)
+
         @property
-        def dtype(self): return None  # placeholder
-        def async_read(self): return None  # placeholder
+        def dtype(self):
+            return None  # placeholder
+
+        def async_read(self):
+            return None  # placeholder
 
     s = _Stub(_DummyConfig())
     assert s.latest_timestamp is None

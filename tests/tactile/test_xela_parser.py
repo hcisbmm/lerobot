@@ -96,10 +96,15 @@ def test_parse_frame_with_calibrated():
 
 def test_parse_frame_model_mismatch_raises():
     msg = {
-        "message": 1, "time": 1.0, "sensors": 1,
+        "message": 1,
+        "time": 1.0,
+        "sensors": 1,
         "1": {
             "data": _xr1944_data_string([0] * 48),
-            "sensor": "1", "taxels": 16, "model": "XR1944", "calibrated": None,
+            "sensor": "1",
+            "taxels": 16,
+            "model": "XR1944",
+            "calibrated": None,
         },
     }
     with pytest.raises(ValueError, match="model mismatch"):
@@ -107,9 +112,18 @@ def test_parse_frame_model_mismatch_raises():
 
 
 def test_parse_frame_missing_sensor_id_raises():
-    msg = {"message": 1, "time": 1.0, "sensors": 1,
-           "1": {"data": _xr1944_data_string([0] * 48), "sensor": "1",
-                 "taxels": 16, "model": "XR1944", "calibrated": None}}
+    msg = {
+        "message": 1,
+        "time": 1.0,
+        "sensors": 1,
+        "1": {
+            "data": _xr1944_data_string([0] * 48),
+            "sensor": "1",
+            "taxels": 16,
+            "model": "XR1944",
+            "calibrated": None,
+        },
+    }
     with pytest.raises(KeyError, match="sensor_id"):
         parse_frame(json.dumps(msg), sensor_id="2", expected_model="XR1944")
 
@@ -117,8 +131,11 @@ def test_parse_frame_missing_sensor_id_raises():
 def test_parse_frame_taxel_count_mismatch_raises():
     """If `data` length disagrees with `taxels` field, refuse."""
     bad_data = ",".join(f"{0:04X}" for _ in range(45))  # 45 instead of 48
-    msg = {"message": 1, "time": 1.0, "sensors": 1,
-           "1": {"data": bad_data, "sensor": "1",
-                 "taxels": 16, "model": "XR1944", "calibrated": None}}
+    msg = {
+        "message": 1,
+        "time": 1.0,
+        "sensors": 1,
+        "1": {"data": bad_data, "sensor": "1", "taxels": 16, "model": "XR1944", "calibrated": None},
+    }
     with pytest.raises(ValueError, match="taxel count"):
         parse_frame(json.dumps(msg), sensor_id="1", expected_model="XR1944")

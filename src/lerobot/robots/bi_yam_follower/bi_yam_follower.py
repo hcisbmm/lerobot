@@ -380,8 +380,7 @@ class BiYamFollower(Robot):
             start = time.perf_counter()
             if self._cam_executor is not None:
                 futures = {
-                    key: self._cam_executor.submit(cam.async_read)
-                    for key, cam in self.cameras.items()
+                    key: self._cam_executor.submit(cam.async_read) for key, cam in self.cameras.items()
                 }
                 for key, fut in futures.items():
                     obs_dict[key] = fut.result()

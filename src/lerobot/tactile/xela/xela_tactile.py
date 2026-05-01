@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import contextlib
 import json
 import logging
 import socket
@@ -93,7 +94,7 @@ class XelaTactileSensor(TactileSensor):
         self._last_seq: int = -1
         self._tare_offset: NDArray[np.float32] | None = None
 
-        self._ws_app: "websocket.WebSocketApp | None" = None
+        self._ws_app: websocket.WebSocketApp | None = None
         self._thread: threading.Thread | None = None
 
     @property
@@ -119,20 +120,18 @@ class XelaTactileSensor(TactileSensor):
     def async_read_calibrated(self) -> NDArray[np.float32]:
         if not self.config.use_calibrated:
             raise NotImplementedError(
-                "XelaTactileSensor.async_read_calibrated() requires "
-                "use_calibrated=True in XelaTactileConfig."
+                "XelaTactileSensor.async_read_calibrated() requires use_calibrated=True in XelaTactileConfig."
             )
         if not self._connected and self._latest is None:
             raise RuntimeError("XelaTactileSensor is not connected; call connect() first.")
         # Wait for the first frame the same way async_read() does, so the
         # caller gets a clear TimeoutError instead of a silent NotImplementedError
         # if xela_server is unreachable.
-        if self._latest is None:
-            if not self._frame_event.wait(timeout=self.config.receive_timeout_s):
-                raise TimeoutError(
-                    f"No XELA frame received within {self.config.receive_timeout_s:.2f}s. "
-                    f"Is xela_server running on {self.config.host}:{self.config.port}?"
-                )
+        if self._latest is None and not self._frame_event.wait(timeout=self.config.receive_timeout_s):
+            raise TimeoutError(
+                f"No XELA frame received within {self.config.receive_timeout_s:.2f}s. "
+                f"Is xela_server running on {self.config.host}:{self.config.port}?"
+            )
         with self._lock:
             cal = None if self._latest_cal is None else self._latest_cal.copy()
         if cal is None:
@@ -174,10 +173,8 @@ class XelaTactileSensor(TactileSensor):
         self._connected = False
         self._stop.set()
         if self._ws_app is not None:
-            try:
+            with contextlib.suppress(Exception):
                 self._ws_app.close()
-            except Exception:
-                pass
         if self._thread is not None and self._thread.is_alive():
             self._thread.join(timeout=2.0)
         self._ws_app = None
@@ -186,13 +183,12 @@ class XelaTactileSensor(TactileSensor):
     def async_read(self) -> NDArray[np.float32]:
         if not self._connected and self._latest is None:
             raise RuntimeError("XelaTactileSensor is not connected; call connect() first.")
-        if self._latest is None:
-            # Block up to receive_timeout_s for the very first frame.
-            if not self._frame_event.wait(timeout=self.config.receive_timeout_s):
-                raise TimeoutError(
-                    f"No XELA frame received within {self.config.receive_timeout_s:.2f}s. "
-                    f"Is xela_server running on {self.config.host}:{self.config.port}?"
-                )
+        # Block up to receive_timeout_s for the very first frame, if not yet available.
+        if self._latest is None and not self._frame_event.wait(timeout=self.config.receive_timeout_s):
+            raise TimeoutError(
+                f"No XELA frame received within {self.config.receive_timeout_s:.2f}s. "
+                f"Is xela_server running on {self.config.host}:{self.config.port}?"
+            )
         with self._lock:
             assert self._latest is not None
             frame = self._latest.copy()
@@ -200,7 +196,9 @@ class XelaTactileSensor(TactileSensor):
         if ts is not None and (time.time() - ts) > 1.0:
             logger.warning(
                 "XELA tactile frame is stale: now-ts=%.2fs (sensor at %s:%d)",
-                time.time() - ts, self.config.host, self.config.port,
+                time.time() - ts,
+                self.config.host,
+                self.config.port,
             )
         if self._tare_offset is not None:
             frame = frame - self._tare_offset
@@ -251,8 +249,7 @@ class XelaTactileSensor(TactileSensor):
         if is_welcome(payload):
             return
         try:
-            result = parse_frame(message, sensor_id=self.config.sensor_id,
-                                 expected_model=self.config.model)
+            result = parse_frame(message, sensor_id=self.config.sensor_id, expected_model=self.config.model)
         except Exception as e:
             logger.warning("XELA: parse error, dropping frame: %s", e)
             return
@@ -291,9 +288,12 @@ class XelaTactileSensor(TactileSensor):
         import argparse
 
         ap = argparse.ArgumentParser(description="XELA tactile sensor smoke test.")
-        ap.add_argument("--host", default="auto",
-                        help="XELA server IP. Default 'auto' resolves to the host's "
-                             "primary LAN IP (matches xela_server's bind behavior).")
+        ap.add_argument(
+            "--host",
+            default="auto",
+            help="XELA server IP. Default 'auto' resolves to the host's "
+            "primary LAN IP (matches xela_server's bind behavior).",
+        )
         ap.add_argument("--port", type=int, default=5000)
         ap.add_argument("--sensor-id", default="1")
         ap.add_argument("--model", default="XR1944")
@@ -301,16 +301,17 @@ class XelaTactileSensor(TactileSensor):
         args = ap.parse_args()
 
         logging.basicConfig(level=logging.INFO)
-        cfg = XelaTactileConfig(host=args.host, port=args.port,
-                                sensor_id=args.sensor_id, model=args.model)
+        cfg = XelaTactileConfig(host=args.host, port=args.port, sensor_id=args.sensor_id, model=args.model)
         sensor = XelaTactileSensor(cfg)
         sensor.connect()
         try:
             t_end = time.time() + args.seconds
             while time.time() < t_end:
                 frame = sensor.async_read()
-                print(f"min={frame.min():8.1f} max={frame.max():8.1f} "
-                      f"mean={frame.mean():8.2f} ts={sensor.latest_timestamp}")
+                print(
+                    f"min={frame.min():8.1f} max={frame.max():8.1f} "
+                    f"mean={frame.mean():8.2f} ts={sensor.latest_timestamp}"
+                )
                 time.sleep(0.1)
         finally:
             sensor.disconnect()

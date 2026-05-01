@@ -51,9 +51,11 @@ def test_mock_sensor_async_read_is_deterministic_per_seed():
     """Two sensors with the same seed must produce the same first frame."""
     a = MockTactileSensor(MockTactileConfig(seed=42))
     b = MockTactileSensor(MockTactileConfig(seed=42))
-    a.connect(); b.connect()
+    a.connect()
+    b.connect()
     np.testing.assert_array_equal(a.async_read(), b.async_read())
-    a.disconnect(); b.disconnect()
+    a.disconnect()
+    b.disconnect()
 
 
 def test_factory_dispatches_to_mock_backend():

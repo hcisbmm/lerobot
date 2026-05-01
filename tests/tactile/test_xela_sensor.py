@@ -22,8 +22,11 @@ import pytest
 
 websocket = pytest.importorskip("websocket")  # skip on machines without websocket-client
 
-from lerobot.tactile.xela.configuration_xela import XelaTactileConfig
-from lerobot.tactile.xela.xela_tactile import XelaTactileSensor
+# E402 (module-level import not at top): intentional — these imports must come
+# AFTER the importorskip above, otherwise machines without `websocket-client`
+# would error on collection rather than skip cleanly.
+from lerobot.tactile.xela.configuration_xela import XelaTactileConfig  # noqa: E402
+from lerobot.tactile.xela.xela_tactile import XelaTactileSensor  # noqa: E402
 
 
 def _xr1944_msg(seq: int, value: int = 0x1234, ts: float = 1.0) -> str:
@@ -127,7 +130,7 @@ def test_out_of_order_frames_are_dropped(patched_ws_app):
     fake.run_forever_called.wait(timeout=2.0)
 
     fake.on_message(fake, _xr1944_msg(seq=10, value=0x0010))
-    fake.on_message(fake, _xr1944_msg(seq=5, value=0x0005))   # older — drop
+    fake.on_message(fake, _xr1944_msg(seq=5, value=0x0005))  # older — drop
     fake.on_message(fake, _xr1944_msg(seq=11, value=0x0011))
 
     frame = sensor.async_read()
@@ -137,8 +140,9 @@ def test_out_of_order_frames_are_dropped(patched_ws_app):
 
 def test_disconnect_returns_last_good_frame(patched_ws_app):
     """After WS close, `async_read` must keep returning the last successfully parsed frame."""
-    sensor = XelaTactileSensor(XelaTactileConfig(receive_timeout_s=2.0,
-                                                 reconnect_backoff_s=10.0))  # never reconnect during test
+    sensor = XelaTactileSensor(
+        XelaTactileConfig(receive_timeout_s=2.0, reconnect_backoff_s=10.0)
+    )  # never reconnect during test
     sensor.connect()
     fake = _wait_for_first(patched_ws_app)
     fake.run_forever_called.wait(timeout=2.0)
@@ -191,9 +195,7 @@ def test_graceful_close_logs_info_not_warning(patched_ws_app, caplog):
     assert close_records, "expected at least one WS-closed log entry"
     # All graceful-close records must be INFO, never WARNING.
     for rec in close_records:
-        assert rec.levelno == logging.INFO, (
-            f"graceful disconnect logged at {rec.levelname}: {rec.message!r}"
-        )
+        assert rec.levelno == logging.INFO, f"graceful disconnect logged at {rec.levelname}: {rec.message!r}"
 
 
 def test_unexpected_close_logs_warning(patched_ws_app, caplog):
@@ -215,10 +217,7 @@ def test_unexpected_close_logs_warning(patched_ws_app, caplog):
 
     sensor.disconnect()
 
-    unexpected_records = [
-        r for r in caplog.records
-        if "WS closed unexpectedly" in r.message
-    ]
+    unexpected_records = [r for r in caplog.records if "WS closed unexpectedly" in r.message]
     assert unexpected_records, "expected at least one unexpected-close warning"
     for rec in unexpected_records:
         assert rec.levelno == logging.WARNING
@@ -251,16 +250,12 @@ def test_seq_reset_on_reconnect(patched_ws_app):
     silently dropped as "out-of-order", freezing async_read() at the last
     pre-disconnect frame indefinitely.
     """
-    sensor = XelaTactileSensor(
-        XelaTactileConfig(receive_timeout_s=2.0, reconnect_backoff_s=0.05)
-    )
+    sensor = XelaTactileSensor(XelaTactileConfig(receive_timeout_s=2.0, reconnect_backoff_s=0.05))
     sensor.connect()
     fake1 = _wait_for_first(patched_ws_app)
     fake1.run_forever_called.wait(timeout=2.0)
     fake1.on_message(fake1, _xr1944_msg(seq=10000, value=0x0010))
-    np.testing.assert_array_equal(
-        sensor.async_read(), np.full(48, 0x10, dtype=np.float32)
-    )
+    np.testing.assert_array_equal(sensor.async_read(), np.full(48, 0x10, dtype=np.float32))
 
     # Simulate server restart: close the current WS, wait for the reader to
     # spawn a new WebSocketApp, then deliver a low-seq frame on the new one.
@@ -274,9 +269,7 @@ def test_seq_reset_on_reconnect(patched_ws_app):
     fake2.on_message(fake2, _xr1944_msg(seq=0, value=0x0042))
 
     # The new frame must be accepted, NOT dropped as out-of-order.
-    np.testing.assert_array_equal(
-        sensor.async_read(), np.full(48, 0x42, dtype=np.float32)
-    )
+    np.testing.assert_array_equal(sensor.async_read(), np.full(48, 0x42, dtype=np.float32))
     sensor.disconnect()
 
 
@@ -290,9 +283,7 @@ def test_provides_calibrated_default_false(patched_ws_app):
 
 def test_async_read_calibrated_returns_xcal_floats(patched_ws_app):
     """When the server delivers `calibrated`, async_read_calibrated returns it."""
-    sensor = XelaTactileSensor(
-        XelaTactileConfig(use_calibrated=True, receive_timeout_s=2.0)
-    )
+    sensor = XelaTactileSensor(XelaTactileConfig(use_calibrated=True, receive_timeout_s=2.0))
     sensor.connect()
     fake = _wait_for_first(patched_ws_app)
     fake.run_forever_called.wait(timeout=2.0)
@@ -305,9 +296,7 @@ def test_async_read_calibrated_returns_xcal_floats(patched_ws_app):
         "model": "XR1944",
         "calibrated": cal_payload,
     }
-    fake.on_message(fake, json.dumps(
-        {"message": 1, "time": 1.0, "sensors": 1, "1": sensor_block}
-    ))
+    fake.on_message(fake, json.dumps({"message": 1, "time": 1.0, "sensors": 1, "1": sensor_block}))
 
     out = sensor.async_read_calibrated()
     assert out.shape == (48,)
@@ -323,9 +312,7 @@ def test_async_read_calibrated_warning_rearms_after_xcal_recovers(patched_ws_app
     """
     import logging
 
-    sensor = XelaTactileSensor(
-        XelaTactileConfig(use_calibrated=True, receive_timeout_s=2.0)
-    )
+    sensor = XelaTactileSensor(XelaTactileConfig(use_calibrated=True, receive_timeout_s=2.0))
     sensor.connect()
     fake = _wait_for_first(patched_ws_app)
     fake.run_forever_called.wait(timeout=2.0)
@@ -338,9 +325,7 @@ def test_async_read_calibrated_warning_rearms_after_xcal_recovers(patched_ws_app
             "model": "XR1944",
             "calibrated": calibrated,
         }
-        return json.dumps(
-            {"message": seq, "time": 1.0, "sensors": 1, "1": sensor_block}
-        )
+        return json.dumps({"message": seq, "time": 1.0, "sensors": 1, "1": sensor_block})
 
     with caplog.at_level(logging.ERROR, logger="lerobot.tactile.xela.xela_tactile"):
         # Stretch 1: XCAL missing → one ERROR
@@ -364,9 +349,7 @@ def test_async_read_calibrated_zero_fills_when_xcal_missing(patched_ws_app, capl
     """If a frame arrives with `calibrated=null`, return zeros + log error once."""
     import logging
 
-    sensor = XelaTactileSensor(
-        XelaTactileConfig(use_calibrated=True, receive_timeout_s=2.0)
-    )
+    sensor = XelaTactileSensor(XelaTactileConfig(use_calibrated=True, receive_timeout_s=2.0))
     sensor.connect()
     fake = _wait_for_first(patched_ws_app)
     fake.run_forever_called.wait(timeout=2.0)
@@ -387,9 +370,7 @@ def test_stale_frame_warning_after_idle(patched_ws_app, caplog):
     """async_read() logs a WARNING when the last frame is older than 1 s."""
     import logging
 
-    sensor = XelaTactileSensor(
-        XelaTactileConfig(receive_timeout_s=2.0, reconnect_backoff_s=10.0)
-    )
+    sensor = XelaTactileSensor(XelaTactileConfig(receive_timeout_s=2.0, reconnect_backoff_s=10.0))
     sensor.connect()
     fake = _wait_for_first(patched_ws_app)
     fake.run_forever_called.wait(timeout=2.0)

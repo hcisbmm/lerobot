@@ -34,26 +34,41 @@ DEFAULT_INI = Path("/etc/xela/xServ.ini")
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--xela-bin", type=Path, default=DEFAULT_BIN,
-                    help="Path to the xela_server AppImage (default: /etc/xela/xela_server).")
-    ap.add_argument("--config", type=Path, default=DEFAULT_INI,
-                    help="Path to xServ.ini (default: /etc/xela/xServ.ini).")
-    ap.add_argument("--ip", default=None,
-                    help="Forwarded as --ip to xela_server. NOTE: v1.7.6 build 158509 "
-                         "silently ignores this flag and always binds to the host's "
-                         "primary NIC IP. Leave unset to skip the no-op flag.")
-    ap.add_argument("--port", type=int, default=5000,
-                    help="Server WebSocket port. Default 5000 matches XELA's manual.")
-    ap.add_argument("--noros", action="store_true", default=True,
-                    help="Pass --noros (default true). Use --noros=false to enable ROS bridge.")
+    ap.add_argument(
+        "--xela-bin",
+        type=Path,
+        default=DEFAULT_BIN,
+        help="Path to the xela_server AppImage (default: /etc/xela/xela_server).",
+    )
+    ap.add_argument(
+        "--config", type=Path, default=DEFAULT_INI, help="Path to xServ.ini (default: /etc/xela/xServ.ini)."
+    )
+    ap.add_argument(
+        "--ip",
+        default=None,
+        help="Forwarded as --ip to xela_server. NOTE: v1.7.6 build 158509 "
+        "silently ignores this flag and always binds to the host's "
+        "primary NIC IP. Leave unset to skip the no-op flag.",
+    )
+    ap.add_argument(
+        "--port", type=int, default=5000, help="Server WebSocket port. Default 5000 matches XELA's manual."
+    )
+    ap.add_argument(
+        "--noros",
+        action="store_true",
+        default=True,
+        help="Pass --noros (default true). Use --noros=false to enable ROS bridge.",
+    )
     args = ap.parse_args()
 
     if not args.xela_bin.exists():
         print(f"error: xela_server binary not found at {args.xela_bin}", file=sys.stderr)
         return 1
     if not args.config.exists():
-        print(f"error: xServ.ini not found at {args.config}. "
-              f"Run `xela_conf -d socketcan -c slcan0` first.", file=sys.stderr)
+        print(
+            f"error: xServ.ini not found at {args.config}. Run `xela_conf -d socketcan -c slcan0` first.",
+            file=sys.stderr,
+        )
         return 1
 
     # XELA's AppImage v1.7.6 build 158509 ignores --ip entirely (always binds to

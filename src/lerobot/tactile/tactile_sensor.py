@@ -96,9 +96,7 @@ class TactileSensor(abc.ABC):
         raises ``NotImplementedError``; backends override together with
         :attr:`provides_calibrated`.
         """
-        raise NotImplementedError(
-            f"{self.__class__.__name__} does not provide a calibrated reading"
-        )
+        raise NotImplementedError(f"{self.__class__.__name__} does not provide a calibrated reading")
 
     @property
     def latest_timestamp(self) -> float | None:

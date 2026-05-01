@@ -80,9 +80,7 @@ def hw_to_dataset_features(
     # would let a future contributor add e.g. a (rows, cols, axes) numeric
     # tensor that simply vanishes from the dataset with no error.
     unsupported_shape_keys = [
-        key
-        for key, shape in hw_features.items()
-        if isinstance(shape, tuple) and len(shape) not in (1, 3)
+        key for key, shape in hw_features.items() if isinstance(shape, tuple) and len(shape) not in (1, 3)
     ]
     if unsupported_shape_keys:
         logging.getLogger(__name__).warning(

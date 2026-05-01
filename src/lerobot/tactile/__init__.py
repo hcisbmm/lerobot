@@ -13,13 +13,13 @@
 # limitations under the License.
 
 from .configs import TactileSensorConfig
-from .tactile_sensor import TactileSensor
 
 # Import backend configs so their @TactileSensorConfig.register_subclass decorators
 # run before draccus parses CLI args. Without this, `--robot.tactile_sensors='{...:
 # {type: xela, ...}}'` fails with "Couldn't find a choice class for 'xela'".
 # Sensor classes (which may pull in optional deps) stay lazy — see utils.make_tactile_sensors_from_configs.
 from .mock.mock_tactile import MockTactileConfig  # noqa: F401
+from .tactile_sensor import TactileSensor
 from .xela.configuration_xela import XelaTactileConfig  # noqa: F401
 
 __all__ = ["TactileSensor", "TactileSensorConfig"]
