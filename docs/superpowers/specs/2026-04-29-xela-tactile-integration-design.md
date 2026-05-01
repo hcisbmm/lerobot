@@ -33,7 +33,7 @@ LeRobot's `BiYamFollower` records joint state, effort, and camera frames. The la
 3. **Q3 observation schema:** flat float vector under one packed key (`observation.tactile.right_finger_r`, shape `(48,)`, dtype `float32`). No image-style framing.
 4. **Q4 placement:** new top-level subsystem `src/lerobot/tactile/`, parallel to `src/lerobot/cameras/`. Robots opt-in via a `tactile_sensors: dict[str, TactileSensorConfig]` field.
 5. **Lifecycle:** `xela_server` runs externally (mirrors how `run_bimanual_yam_server.py` is launched). LeRobot connects as a client.
-6. **Default record content:** raw 48-channel vector (uint16 magnetic-field readings cast losslessly to `float32`, since uint16 ⊂ float32). Optional `use_calibrated=True` adds a parallel `*.cal` `float32` key holding XCAL-calibrated Newtons.
+6. **Default record content:** raw 48-channel vector (uint16 magnetic-field readings cast losslessly to `float32`, since uint16 ⊂ float32). The `use_calibrated=True` flag is preserved for v2 — v1 captures the calibrated field internally but does not yet route it through `async_read()` or emit an `*.cal` sibling key (one-shot warning logged on construct when set).
 7. **Tare:** off by default; opt-in flag `tare_on_connect` for users who want it.
 8. **Failure mode:** WS disconnect → log warning, return last-good-frame, auto-reconnect with capped exponential backoff.
 9. **No new `lerobot-record-with-tactile` script.** Stock `lerobot-record` works because tactile flows through `BiYamFollower.get_observation()`.
@@ -118,7 +118,7 @@ The reader thread holds a `WebSocketApp` open; on each frame it parses, validate
 | Key | Shape | Dtype | When |
 | --- | --- | --- | --- |
 | `observation.tactile.right_finger_r` | `(48,)` | `float32` | Always when sensor is configured. Decoded from comma-separated 4-char hex (uint16 in `[0, 65535]`) and cast losslessly to `float32`. Matches the dtype of all other proprio columns; zero cast cost in training. |
-| `observation.tactile.right_finger_r.cal` | `(48,)` | `float32` | Only when `use_calibrated=True` AND server frame's `calibrated` is non-null. XCAL-calibrated forces (Newtons). |
+| `observation.tactile.right_finger_r.cal` | `(48,)` | `float32` | **v2 only — not yet shipped.** Reserved for XCAL-calibrated forces (Newtons). v1 ignores `use_calibrated`; see review item #2. |
 
 `BiYamFollower.observation_features` exposes `("observation.tactile.right_finger_r", (48,))` so `LeRobotDataset` writes it as a numeric tensor column — no video codec involvement.
 

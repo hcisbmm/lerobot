@@ -45,6 +45,11 @@ class XelaTactileConfig(TactileSensorConfig):
     port: int = 5000
     sensor_id: str = "1"
     model: str = "XR1944"
+    # NOTE (v1): `use_calibrated=True` is currently a no-op — the calibrated
+    # field is captured by the reader but not surfaced via async_read() or
+    # written to the dataset. The flag is preserved for forward-compatibility
+    # with a planned v2 that emits an `observation.tactile.<name>.cal` sibling
+    # key. Setting it True today logs a one-shot warning at construct time.
     use_calibrated: bool = False
     tare_on_connect: bool = False
     reconnect_backoff_s: float = 0.5

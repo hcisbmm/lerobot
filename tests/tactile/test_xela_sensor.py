@@ -280,6 +280,27 @@ def test_seq_reset_on_reconnect(patched_ws_app):
     sensor.disconnect()
 
 
+def test_use_calibrated_logs_no_op_warning(caplog):
+    """v1 documents `use_calibrated=True` as a no-op; warn at construct time."""
+    import logging
+
+    with caplog.at_level(logging.WARNING, logger="lerobot.tactile.xela.xela_tactile"):
+        XelaTactileSensor(XelaTactileConfig(use_calibrated=True))
+    no_op_records = [r for r in caplog.records if "no effect in v1" in r.message]
+    assert no_op_records, "expected a one-shot 'no effect in v1' warning"
+    assert no_op_records[0].levelno == logging.WARNING
+
+
+def test_use_calibrated_default_silent(caplog):
+    """Default `use_calibrated=False` must not emit the no-op warning."""
+    import logging
+
+    with caplog.at_level(logging.WARNING, logger="lerobot.tactile.xela.xela_tactile"):
+        XelaTactileSensor(XelaTactileConfig())  # default: use_calibrated=False
+    no_op_records = [r for r in caplog.records if "no effect in v1" in r.message]
+    assert not no_op_records, "default config must not log the no-op warning"
+
+
 def test_stale_frame_warning_after_idle(patched_ws_app, caplog):
     """async_read() logs a WARNING when the last frame is older than 1 s."""
     import logging

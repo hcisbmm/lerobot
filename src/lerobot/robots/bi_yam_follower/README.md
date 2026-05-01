@@ -1098,9 +1098,13 @@ fallbacks if SIGTERM hangs.
 | --- | --- | --- | --- |
 | `observation.tactile.right_finger_r` | `(48,)` | `float32` | Raw uint16 magnetic-field readings cast losslessly to float32 (16 taxels × X/Y/Z). |
 
-To enable XCAL-calibrated forces (Newtons) alongside, add `"use_calibrated": true` to
-the sensor config; a sibling `observation.tactile.right_finger_r.cal` key appears when
-`xela_server` has the `.xcal` files installed.
+**Calibrated forces (planned, not yet wired):** the `XelaTactileConfig.use_calibrated`
+flag is preserved for forward-compatibility with a planned v2 that will emit an
+`observation.tactile.right_finger_r.cal` sibling float32 column when XCAL files
+are installed. v1 captures the calibrated field internally but does **not** route
+it to `async_read()` or the dataset writer; setting `use_calibrated=True` today
+logs a one-shot warning and otherwise has no effect. Raw uint16 readings are
+recorded regardless.
 
 ### Naming convention for adding more sensors
 

@@ -82,6 +82,21 @@ class XelaTactileSensor(TactileSensor):
         self.config: XelaTactileConfig = config
         self._shape = config.expected_shape  # validate model name early
 
+        # `use_calibrated=True` captures XCAL forces from each frame into
+        # `_latest_cal`, but v1 does NOT plumb them through to async_read() or
+        # emit an `observation.tactile.<name>.cal` sibling key. Setting the
+        # flag has no observable effect on the recorded dataset today; the
+        # plumbing is tracked for v2 (when XCAL files are part of bring-up).
+        # Warn so operators aren't silently misled.
+        if config.use_calibrated:
+            logger.warning(
+                "XelaTactileConfig.use_calibrated=True has no effect in v1 — the "
+                "calibrated field is captured internally but not exposed via "
+                "async_read() or written to the dataset. Set this flag to False "
+                "until XCAL plumbing lands; raw uint16 readings are recorded "
+                "regardless. (Tracked as PR #1 review item #2.)"
+            )
+
         self._connected: bool = False
         self._stop = threading.Event()
         self._lock = threading.Lock()
