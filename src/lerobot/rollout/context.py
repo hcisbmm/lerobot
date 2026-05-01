@@ -250,7 +250,7 @@ def build_rollout_context(
     initial_position = {k: v for k, v in initial_obs.items() if k.endswith(".pos")}
     logger.info("Captured initial robot position (%d keys)", len(initial_position))
 
-    robot_wrapper = ThreadSafeRobot(robot)
+    robot_wrapper = ThreadSafeRobot(robot, record_effort=cfg.record_effort)
 
     teleop = None
     if cfg.teleop is not None:
@@ -277,8 +277,11 @@ def build_rollout_context(
 
     # --- 4. Features + action-key reconciliation ---------------------
     # TODO(Steven):Only ``.pos`` joint features are routed to the policy as state and as the
-    # action target; velocity and torque channels (when present) are kept in
-    # the raw observation but excluded from the policy-facing tensors.
+    # action target; velocity channels (when present) are kept in the raw
+    # observation but excluded from the policy-facing tensors.  Torque
+    # (``.eff``) channels are routed to the policy when ``record_effort=True``
+    # so policies trained on data that included effort get the matching
+    # state dimensionality at deployment.
     all_obs_features = robot.observation_features
     # ``observation_features`` values are either a tuple (camera shape) or the
     # ``float`` type itself used as a sentinel for scalar motor features —
@@ -286,7 +289,9 @@ def build_rollout_context(
     observation_features_hw = {
         k: v
         for k, v in all_obs_features.items()
-        if isinstance(v, tuple) or (v is float and k.endswith(".pos"))
+        if isinstance(v, tuple)
+        or (v is float and k.endswith(".pos"))
+        or (v is float and k.endswith(".eff") and cfg.record_effort)
     }
     action_features_hw = {k: v for k, v in robot.action_features.items() if k.endswith(".pos")}
 

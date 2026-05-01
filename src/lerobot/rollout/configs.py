@@ -206,6 +206,8 @@ class RolloutConfig:
     # Use vocal synthesis to read events
     play_sounds: bool = True
     resume: bool = False
+    # Include joint effort/torque data in recorded observations
+    record_effort: bool = False
     # Rename map for mapping robot/dataset observation keys to policy keys
     rename_map: dict[str, str] = field(default_factory=dict)
 

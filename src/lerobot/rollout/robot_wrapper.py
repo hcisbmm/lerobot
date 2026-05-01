@@ -33,15 +33,19 @@ class ThreadSafeRobot:
     mutate hardware state.
     """
 
-    def __init__(self, robot: Robot) -> None:
+    def __init__(self, robot: Robot, record_effort: bool = False) -> None:
         self._robot = robot
         self._lock = Lock()
+        self._record_effort = record_effort
 
     # -- Lock-protected I/O --------------------------------------------------
 
     def get_observation(self) -> dict[str, Any]:
         with self._lock:
-            return self._robot.get_observation()
+            obs = self._robot.get_observation()
+        if not self._record_effort:
+            obs = {k: v for k, v in obs.items() if not k.endswith(".eff")}
+        return obs
 
     def send_action(self, action: dict[str, Any] | Any) -> Any:
         with self._lock:
