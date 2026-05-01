@@ -115,16 +115,17 @@ The reader thread holds a `WebSocketApp` open; on each frame it parses, validate
 
 ## Observation schema
 
-| Key | Shape | Dtype | When |
-| --- | --- | --- | --- |
-| `observation.tactile.right_finger_r` | `(48,)` | `float32` | Always when sensor is configured. Decoded from comma-separated 4-char hex (uint16 in `[0, 65535]`) and cast losslessly to `float32`. Matches the dtype of all other proprio columns; zero cast cost in training. |
-| `observation.tactile.right_finger_r.cal` | `(48,)` | `float32` | When `use_calibrated=True`. XCAL-calibrated forces (Newtons). If XCAL files are missing server-side, zero-filled with a one-shot `ERROR` in the log. |
+| Key                                      | Shape   | Dtype     | When                                                                                                                                                                                                             |
+| ---------------------------------------- | ------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `observation.tactile.right_finger_r`     | `(48,)` | `float32` | Always when sensor is configured. Decoded from comma-separated 4-char hex (uint16 in `[0, 65535]`) and cast losslessly to `float32`. Matches the dtype of all other proprio columns; zero cast cost in training. |
+| `observation.tactile.right_finger_r.cal` | `(48,)` | `float32` | When `use_calibrated=True`. XCAL-calibrated forces (Newtons). If XCAL files are missing server-side, zero-filled with a one-shot `ERROR` in the log.                                                             |
 
 `BiYamFollower.observation_features` exposes `("observation.tactile.right_finger_r", (48,))` so `LeRobotDataset` writes it as a numeric tensor column — no video codec involvement.
 
 ## WebSocket parser (XelaTactileSensor)
 
 Per the manual (pp. 37–38):
+
 1. Connect to `ws://host:port`.
 2. First message: ignore if `data["message"] == "Welcome"`.
 3. Each subsequent message:
@@ -168,14 +169,14 @@ lerobot-record \
 
 ## Failure modes & guarantees
 
-| Condition | Behaviour |
-| --- | --- |
-| `xela_server` not reachable at `connect()` | Raise `ConnectionError` with bring-up runbook hint. |
-| WS disconnect mid-episode | Reader auto-reconnects (backoff `reconnect_backoff_s` doubling, capped at 2 s); `async_read` returns last-good-frame; one warning per disconnect. |
-| Sequence regression | Frame dropped silently. |
-| Stale frame (`now − latest_timestamp > 1 s`) | One-shot WARNING per staleness episode; data still returned. |
-| Model mismatch (xServ.ini vs config) | `connect()` raises `RuntimeError`. |
-| `use_calibrated=True` but `frame["calibrated"]` is null | One-shot WARNING; `*.cal` key omitted from observation that tick. |
+| Condition                                               | Behaviour                                                                                                                                         |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `xela_server` not reachable at `connect()`              | Raise `ConnectionError` with bring-up runbook hint.                                                                                               |
+| WS disconnect mid-episode                               | Reader auto-reconnects (backoff `reconnect_backoff_s` doubling, capped at 2 s); `async_read` returns last-good-frame; one warning per disconnect. |
+| Sequence regression                                     | Frame dropped silently.                                                                                                                           |
+| Stale frame (`now − latest_timestamp > 1 s`)            | One-shot WARNING per staleness episode; data still returned.                                                                                      |
+| Model mismatch (xServ.ini vs config)                    | `connect()` raises `RuntimeError`.                                                                                                                |
+| `use_calibrated=True` but `frame["calibrated"]` is null | One-shot WARNING; `*.cal` key omitted from observation that tick.                                                                                 |
 
 ## Testing
 
@@ -194,18 +195,18 @@ lerobot-record \
 
 ## File-level diff summary
 
-| Action | File | LOC est. |
-| --- | --- | --- |
-| New | `src/lerobot/tactile/__init__.py` | 5 |
-| New | `src/lerobot/tactile/configs.py` | 30 |
-| New | `src/lerobot/tactile/tactile_sensor.py` | 60 |
-| New | `src/lerobot/tactile/utils.py` | 25 |
-| New | `src/lerobot/tactile/xela/configuration_xela.py` | 35 |
-| New | `src/lerobot/tactile/xela/xela_tactile.py` | 220 |
-| New | `src/lerobot/tactile/mock/mock_tactile.py` | 60 |
-| New | `src/lerobot/robots/bi_yam_follower/run_xela_server.py` | 80 |
-| Edit | `src/lerobot/robots/bi_yam_follower/config_bi_yam_follower.py` | +15 |
-| Edit | `src/lerobot/robots/bi_yam_follower/bi_yam_follower.py` | +50 |
-| Edit | `src/lerobot/robots/bi_yam_follower/README.md` | +60 |
-| Edit | `pyproject.toml` (add `websocket-client` to `[yam]` extra) | +1 |
-| New | `tests/tactile/` | ~150 |
+| Action | File                                                           | LOC est. |
+| ------ | -------------------------------------------------------------- | -------- |
+| New    | `src/lerobot/tactile/__init__.py`                              | 5        |
+| New    | `src/lerobot/tactile/configs.py`                               | 30       |
+| New    | `src/lerobot/tactile/tactile_sensor.py`                        | 60       |
+| New    | `src/lerobot/tactile/utils.py`                                 | 25       |
+| New    | `src/lerobot/tactile/xela/configuration_xela.py`               | 35       |
+| New    | `src/lerobot/tactile/xela/xela_tactile.py`                     | 220      |
+| New    | `src/lerobot/tactile/mock/mock_tactile.py`                     | 60       |
+| New    | `src/lerobot/robots/bi_yam_follower/run_xela_server.py`        | 80       |
+| Edit   | `src/lerobot/robots/bi_yam_follower/config_bi_yam_follower.py` | +15      |
+| Edit   | `src/lerobot/robots/bi_yam_follower/bi_yam_follower.py`        | +50      |
+| Edit   | `src/lerobot/robots/bi_yam_follower/README.md`                 | +60      |
+| Edit   | `pyproject.toml` (add `websocket-client` to `[yam]` extra)     | +1       |
+| New    | `tests/tactile/`                                               | ~150     |

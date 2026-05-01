@@ -86,9 +86,7 @@ def test_get_observation_includes_tactile_vector(follower_with_mock_tactile):
 @pytest.fixture
 def follower_with_mock_calibrated_tactile():
     """BiYamFollower with a MockTactileSensor that exposes the calibrated path."""
-    cfg = BiYamFollowerConfig(
-        tactile_sensors={"right_finger_r": MockTactileConfig(provides_calibrated=True)}
-    )
+    cfg = BiYamFollowerConfig(tactile_sensors={"right_finger_r": MockTactileConfig(provides_calibrated=True)})
     follower = BiYamFollower(cfg)
 
     fake_obs = {

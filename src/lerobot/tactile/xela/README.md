@@ -6,12 +6,12 @@ the XELA Software Manual into a flat `(N,)` `np.float32` vector per read.
 
 ## Supported models
 
-| Model | Layout | Channels |
-| --- | --- | --- |
-| `XR1944` | 4×4 taxels × 3 axes | 48 |
-| `XR1946` | 4×6 taxels × 3 axes | 72 |
-| `XR2244` | 4×4 (magnetic-comp) × 3 axes | 48 |
-| `XR1922` | 4×4 × 3 axes | 48 |
+| Model    | Layout                       | Channels |
+| -------- | ---------------------------- | -------- |
+| `XR1944` | 4×4 taxels × 3 axes          | 48       |
+| `XR1946` | 4×6 taxels × 3 axes          | 72       |
+| `XR2244` | 4×4 (magnetic-comp) × 3 axes | 48       |
+| `XR1922` | 4×4 × 3 axes                 | 48       |
 
 Add new models in `configuration_xela.py:TAXELS_BY_MODEL`.
 
@@ -144,12 +144,12 @@ After step (3), `xela_server` prints a status line that updates in place:
 `Ctrl+C` does **not** stop a backgrounded (`&`) process — it only signals the
 foreground process group. Use one of:
 
-| Command | When to use |
-| --- | --- |
-| `kill $!` | Cleanest, when you started it via `&` in the same shell. `$!` is the most-recent backgrounded PID. |
-| `pkill -f xela_server` | When `$!` is no longer in scope or there are stale instances. SIGTERM by default — graceful. |
-| `pkill -9 xela_server` | Manual's fallback if SIGTERM hangs (XELA Software Manual v1.7.6, p. 39). |
-| `fg` then `Ctrl+C` | Bring the bg job back to fg, then SIGINT it. |
+| Command                | When to use                                                                                        |
+| ---------------------- | -------------------------------------------------------------------------------------------------- |
+| `kill $!`              | Cleanest, when you started it via `&` in the same shell. `$!` is the most-recent backgrounded PID. |
+| `pkill -f xela_server` | When `$!` is no longer in scope or there are stale instances. SIGTERM by default — graceful.       |
+| `pkill -9 xela_server` | Manual's fallback if SIGTERM hangs (XELA Software Manual v1.7.6, p. 39).                           |
+| `fg` then `Ctrl+C`     | Bring the bg job back to fg, then SIGINT it.                                                       |
 
 ## Optional vendor tools
 
@@ -160,7 +160,7 @@ but are **not** required for `lerobot-record`:
 
 Pops a Qt/SDL2 window showing the 4×4 (or 4×6) taxel grid with circles whose
 size and colour track contact pressure in real time. Useful for confirming the
-sensor is wired correctly and responds to touch *before* you depend on it
+sensor is wired correctly and responds to touch _before_ you depend on it
 inside a LeRobot recording.
 
 ```bash
@@ -189,24 +189,24 @@ for ready-to-run modes (`summary`, `timeseries`, `heatmap`, `frame`, `all`).
 
 ### LeRobot client side
 
-| Condition | Behaviour |
-| --- | --- |
-| `xela_server` not running at connect | `XelaTactileSensor.async_read()` raises `TimeoutError` after `receive_timeout_s`. |
-| WS disconnect mid-episode | Reader auto-reconnects (capped exponential backoff to 2 s); `async_read` returns last-good-frame; one warning per disconnect. |
-| Sequence regression | Frame dropped silently. |
-| Stale frame (`now − latest_timestamp > 1 s`) | Warning logged each call, data still returned. |
-| Model mismatch (xServ.ini vs config) | Frame dropped, warning logged. |
+| Condition                                    | Behaviour                                                                                                                     |
+| -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `xela_server` not running at connect         | `XelaTactileSensor.async_read()` raises `TimeoutError` after `receive_timeout_s`.                                             |
+| WS disconnect mid-episode                    | Reader auto-reconnects (capped exponential backoff to 2 s); `async_read` returns last-good-frame; one warning per disconnect. |
+| Sequence regression                          | Frame dropped silently.                                                                                                       |
+| Stale frame (`now − latest_timestamp > 1 s`) | Warning logged each call, data still returned.                                                                                |
+| Model mismatch (xServ.ini vs config)         | Frame dropped, warning logged.                                                                                                |
 
 ### Vendor binary side (xela_conf / xela_server)
 
 Lifted from XELA Software Manual v1.7.6 §"Common errors" (p. 39–40).
 
-| Vendor error | Cause / fix |
-| --- | --- |
-| `xela_conf`: `Message not sent: Transmit operation timed out` | The CAN-USB converter's USB power cable isn't connected, or the DSUB-9 link to the converter is loose. Both VScom USB cables must be plugged in. |
-| `Could not start CAN: OSError: [Errno 19] No such device` | The slCAN network interface isn't up. Re-run the per-boot bring-up: `sudo slcand …; sudo ifconfig slcan0 up`. |
-| `Error connecting to CAN: IOError: [Errno 19] No such device` | No CAN device found at all — adapter unplugged, driver missing, or `bustype/channel` in `xServ.ini` doesn't match the hardware. |
-| `Error writing config file: IOError: [Errno 2] No such file or directory: '/etc/xela/xServ.ini'` | `/etc/xela` doesn't exist or isn't writable. Re-run the [First-time setup](#first-time-setup-one-time-per-machine) `mkdir`/`chmod 777` steps. |
-| `xela_server` runs but `xela_viz` shows no data | On Windows: AV software blocks the local WS connection — disable AV. On Linux this combination is rare; check the `xServ.ini` `[sensor]` block for a model mismatch first. |
-| New CAN-USB converter not recognised | Check that the converter is supported (`socketcan`/`esd`/`pcan`), `xServ.ini` has the right `bustype` + `channel`, the network is up, and the `ctrl_id` matches the hardware (vendor manual §"CAN types"). |
-| Program won't respond to `Ctrl+C` | Use `Ctrl+Shift+\` (SIGQUIT) or `pkill -9 xela_server` — see [Terminating `xela_server`](#terminating-xela_server) above. |
+| Vendor error                                                                                     | Cause / fix                                                                                                                                                                                                |
+| ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `xela_conf`: `Message not sent: Transmit operation timed out`                                    | The CAN-USB converter's USB power cable isn't connected, or the DSUB-9 link to the converter is loose. Both VScom USB cables must be plugged in.                                                           |
+| `Could not start CAN: OSError: [Errno 19] No such device`                                        | The slCAN network interface isn't up. Re-run the per-boot bring-up: `sudo slcand …; sudo ifconfig slcan0 up`.                                                                                              |
+| `Error connecting to CAN: IOError: [Errno 19] No such device`                                    | No CAN device found at all — adapter unplugged, driver missing, or `bustype/channel` in `xServ.ini` doesn't match the hardware.                                                                            |
+| `Error writing config file: IOError: [Errno 2] No such file or directory: '/etc/xela/xServ.ini'` | `/etc/xela` doesn't exist or isn't writable. Re-run the [First-time setup](#first-time-setup-one-time-per-machine) `mkdir`/`chmod 777` steps.                                                              |
+| `xela_server` runs but `xela_viz` shows no data                                                  | On Windows: AV software blocks the local WS connection — disable AV. On Linux this combination is rare; check the `xServ.ini` `[sensor]` block for a model mismatch first.                                 |
+| New CAN-USB converter not recognised                                                             | Check that the converter is supported (`socketcan`/`esd`/`pcan`), `xServ.ini` has the right `bustype` + `channel`, the network is up, and the `ctrl_id` matches the hardware (vendor manual §"CAN types"). |
+| Program won't respond to `Ctrl+C`                                                                | Use `Ctrl+Shift+\` (SIGQUIT) or `pkill -9 xela_server` — see [Terminating `xela_server`](#terminating-xela_server) above.                                                                                  |

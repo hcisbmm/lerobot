@@ -31,12 +31,12 @@ where `name` is the descriptive key from `--robot.tactile_sensors='{name: …}'`
 
 The recording pipeline preserves this 1-D shape end-to-end:
 
-| Stage | Spec |
-| --- | --- |
-| Robot observation key | `observation.tactile.<name>` |
-| Raw value | `np.ndarray` shape `(N,)`, dtype `float32` |
-| Dataset feature | `{"dtype": "float32", "shape": (N,), "names": ["0", …, str(N-1)]}` |
-| `LeRobotDataset` column | Same; each frame stored as one Parquet `list<float32>` cell |
+| Stage                   | Spec                                                               |
+| ----------------------- | ------------------------------------------------------------------ |
+| Robot observation key   | `observation.tactile.<name>`                                       |
+| Raw value               | `np.ndarray` shape `(N,)`, dtype `float32`                         |
+| Dataset feature         | `{"dtype": "float32", "shape": (N,), "names": ["0", …, str(N-1)]}` |
+| `LeRobotDataset` column | Same; each frame stored as one Parquet `list<float32>` cell        |
 
 This is distinct from images (`(H, W, 3)`, dtype `video`/`image`) and bundled
 state vectors (`observation.state`, packed from individual scalar joint keys).

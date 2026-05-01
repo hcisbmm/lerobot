@@ -195,11 +195,11 @@ python src/lerobot/robots/bi_yam_follower/run_bimanual_yam_server.py \
 
 Coulomb friction feedforward (Cff in MIT mode) helps the first few joints overcome static friction on small leader motions without raising `kp`. Per-arm defaults live in the YAML configs under `third_party/i2rt/i2rt/robots/config/`, so **you don't need any flag for normal operation** — they're applied automatically based on `--follower_arm_type` (default `yam_ultra`). Use the flags below only to override on the fly.
 
-| Flag | Type | Default | What it does |
-| --- | --- | --- | --- |
-| `--enable_friction_comp` | `{None, True, False}` | `None` → use YAML | Force enable / force disable. `None` (omit the flag) means "honor the YAML's `friction_comp.enable`". |
-| `--friction_breakaway` | list of floats | `()` → use YAML | Per-joint breakaway torque (Nm) — the saturation amplitude of the smooth-tanh feedforward. Length **6** = arm joints only (gripper element is appended from the gripper YAML); length **7** = full arm + gripper override. Set 0 for joints you don't want compensated. |
-| `--friction_eps` | float | `None` → use YAML | Saturation width (rad) for the tanh blend (`τ = breakaway · tanh(err / eps)`). Smaller `eps` = sharper, more aggressive transition; larger = smoother but less stiction relief. Typical range 0.003–0.02. |
+| Flag                     | Type                  | Default           | What it does                                                                                                                                                                                                                                                            |
+| ------------------------ | --------------------- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--enable_friction_comp` | `{None, True, False}` | `None` → use YAML | Force enable / force disable. `None` (omit the flag) means "honor the YAML's `friction_comp.enable`".                                                                                                                                                                   |
+| `--friction_breakaway`   | list of floats        | `()` → use YAML   | Per-joint breakaway torque (Nm) — the saturation amplitude of the smooth-tanh feedforward. Length **6** = arm joints only (gripper element is appended from the gripper YAML); length **7** = full arm + gripper override. Set 0 for joints you don't want compensated. |
+| `--friction_eps`         | float                 | `None` → use YAML | Saturation width (rad) for the tanh blend (`τ = breakaway · tanh(err / eps)`). Smaller `eps` = sharper, more aggressive transition; larger = smoother but less stiction relief. Typical range 0.003–0.02.                                                               |
 
 Tuning loop: launch with the bare command, hand-drive the followers, watch for joints that lag or stick on small motions, then re-launch with overrides like `--friction_breakaway 1.2 1.8 1.6 0.1 0 0 0 --friction_eps 0.005` and iterate. Increase `breakaway` for sticky joints, lower `eps` if motion feels mushy, raise `eps` if joints chatter at zero crossings.
 
@@ -212,14 +212,14 @@ Once you've found values that work, save them to the YAMLs so every future launc
   ```yaml
   friction_comp:
     enable: true
-    breakaway: [1.2, 1.8, 1.6, 0.1, 0.0, 0.0]   # 6 = arm joints only (J0..J5)
+    breakaway: [1.2, 1.8, 1.6, 0.1, 0.0, 0.0] # 6 = arm joints only (J0..J5)
     eps: 0.005
   ```
 
 - **Gripper YAML** — `third_party/i2rt/i2rt/robots/config/linear_4310.yml` (or whichever gripper you use):
 
   ```yaml
-  friction_comp_breakaway: 0.0   # set non-zero only if the gripper motor itself benefits from comp
+  friction_comp_breakaway: 0.0 # set non-zero only if the gripper motor itself benefits from comp
   ```
 
 At runtime `get_yam_robot()` concatenates `arm.friction_comp.breakaway` (length 6) with the gripper's `friction_comp_breakaway` (length 1) into the final length-7 array, mirroring how `kp` / `kd` are assembled.
@@ -250,7 +250,7 @@ Leave both this terminal AND the arm-server terminal running while recording.
 
 #### Step 2.1: Test Teleoperator (In another terminal)
 
-Before recording, test that the teleoperator connection works (--compare_leader_follower_data to moniter the difference btw leader and follower joint position):
+Before recording, test that the teleoperator connection works (--compare_leader_follower_data to monitor the difference btw leader and follower joint position):
 
 ```bash
 lerobot-teleoperate \
@@ -265,6 +265,7 @@ lerobot-teleoperate \
 ```
 
 #### With Torque Input
+
 ```bash
 lerobot-teleoperate \
   --robot.type=bi_yam_follower \
@@ -347,6 +348,7 @@ ls -la /dev/v4l/by-id/
 ```
 
 This shows symlinks like:
+
 ```
 usb-<Manufacturer>_<Model>_<Serial>-video-index0 -> ../../video21
 ```
@@ -399,18 +401,18 @@ lerobot-teleoperate \
   --robot.use_palm_camera=true \
   --robot.palm_camera_auto_exposure=1 \
   --robot.palm_camera_exposure=200
-  
+
 ```
 
 **Palm camera parameters**
 
-| Flag | Default | Description |
-| --- | --- | --- |
-| `--robot.use_palm_camera` | `false` | Enable the two palm USB cameras (`left_palm`, `right_palm`). Their device paths are pinned via `/dev/v4l/by-path/...` in [config_bi_yam_follower.py](config_bi_yam_follower.py). |
-| `--robot.palm_camera_fps` | `30` | Frame rate for both palm cameras. |
-| `--robot.palm_camera_fourcc` | `MJPG` | FOURCC codec. `MJPG` is required to hit 30 fps on most USB 2.0 webcams; set to `None` to auto-detect. |
-| `--robot.palm_camera_auto_exposure` | `None` | `cv2.CAP_PROP_AUTO_EXPOSURE`. On V4L2: `1` = manual (locked exposure), `3` = aperture priority (auto). Leave unset to keep the driver default. |
-| `--robot.palm_camera_exposure` | `None` | `cv2.CAP_PROP_EXPOSURE`. Only applied when `auto_exposure=1`. V4L2 unit ≈ 100 µs (so `200` ≈ 20 ms shutter). Typical Arducam range: `3–2047`. Higher = brighter but more motion blur and lower max FPS. Recommand value 200 |
+| Flag                                | Default | Description                                                                                                                                                                                                                   |
+| ----------------------------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--robot.use_palm_camera`           | `false` | Enable the two palm USB cameras (`left_palm`, `right_palm`). Their device paths are pinned via `/dev/v4l/by-path/...` in [config_bi_yam_follower.py](config_bi_yam_follower.py).                                              |
+| `--robot.palm_camera_fps`           | `30`    | Frame rate for both palm cameras.                                                                                                                                                                                             |
+| `--robot.palm_camera_fourcc`        | `MJPG`  | FOURCC codec. `MJPG` is required to hit 30 fps on most USB 2.0 webcams; set to `None` to auto-detect.                                                                                                                         |
+| `--robot.palm_camera_auto_exposure` | `None`  | `cv2.CAP_PROP_AUTO_EXPOSURE`. On V4L2: `1` = manual (locked exposure), `3` = aperture priority (auto). Leave unset to keep the driver default.                                                                                |
+| `--robot.palm_camera_exposure`      | `None`  | `cv2.CAP_PROP_EXPOSURE`. Only applied when `auto_exposure=1`. V4L2 unit ≈ 100 µs (so `200` ≈ 20 ms shutter). Typical Arducam range: `3–2047`. Higher = brighter but more motion blur and lower max FPS. Recommended value 200 |
 
 To find the valid exposure range for your camera:
 
@@ -599,7 +601,9 @@ lerobot-record \
   --dataset.streaming_encoding=true \
   --dataset.encoder_threads=2
 ```
+
 #### With Torque Recording
+
 ```bash
 lerobot-record \
   --robot.type=bi_yam_follower \
@@ -680,10 +684,10 @@ The depth range controls both the hardware clamp and the log-quantization
 scale. Log-scale quantization puts more bits near the close range, so
 **narrowing the range gives substantially tighter precision.**
 
-| Flag              | Default | When to change                                                                         |
-| ----------------- | ------- | -------------------------------------------------------------------------------------- |
-| `--min_depth_m`   | `0.10`  | Raise if your closest object is always > some value (rare).                            |
-| `--max_depth_m`   | `3.00`  | **Lower for close-range manipulation.** For tabletop tasks use `1.00` or even `0.60`. |
+| Flag            | Default | When to change                                                                        |
+| --------------- | ------- | ------------------------------------------------------------------------------------- |
+| `--min_depth_m` | `0.10`  | Raise if your closest object is always > some value (rare).                           |
+| `--max_depth_m` | `3.00`  | **Lower for close-range manipulation.** For tabletop tasks use `1.00` or even `0.60`. |
 
 For example, a tabletop pick-and-place task with objects at 0.2–0.8 m:
 
@@ -916,7 +920,7 @@ If you see warnings about slow control frequency:
 - This usually means the system is overloaded
 - Try reducing camera resolution or FPS
 - Check CPU usage and close unnecessary applications
-- Watch out for *first-second* warmup warnings (camera cold start, NVENC
+- Watch out for _first-second_ warmup warnings (camera cold start, NVENC
   encoder init): the FPS warning fires at the very first frame interval and
   may report a dramatic value (e.g., 4 Hz) even though the loop catches up to
   the target rate within a second. Confirm steady state before acting.
@@ -952,7 +956,7 @@ unplug or `slcand` reset will drop the WS. The recorder logs the close but
 does not auto-reconnect mid-episode. Stop the run, fix the link, and resume.
 
 **Frame validation crashes with shape `(48,)`** — symptom of the now-fixed
-"1D tactile feature mis-classified as a video stream" bug. Make sure you're
+"1D tactile feature misclassified as a video stream" bug. Make sure you're
 on the version that includes the `hw_to_dataset_features` rank split (commit
 `a882a8da` or later).
 
@@ -1094,8 +1098,8 @@ fallbacks if SIGTERM hangs.
 
 ### Recorded keys
 
-| Key | Shape | Dtype | Notes |
-| --- | --- | --- | --- |
+| Key                                  | Shape   | Dtype     | Notes                                                                              |
+| ------------------------------------ | ------- | --------- | ---------------------------------------------------------------------------------- |
 | `observation.tactile.right_finger_r` | `(48,)` | `float32` | Raw uint16 magnetic-field readings cast losslessly to float32 (16 taxels × X/Y/Z). |
 
 **Calibrated forces (XCAL):** set `"use_calibrated": true` on the sensor

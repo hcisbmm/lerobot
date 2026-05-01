@@ -31,13 +31,13 @@ uv run python examples/tactile/inspect_tactile_dataset.py \
 
 ### Modes
 
-| `--mode`    | What it shows |
-| ---         | --- |
-| `summary`   | Shape / dtype / per-axis (X, Y, Z) min, max, mean, std over the episode. **No GUI required** — useful in CI or over SSH. |
-| `timeseries`| Three stacked line plots (X, Y, Z) with one line per taxel over the episode. Spikes correspond to contact events. |
-| `heatmap`   | Animated 4×4 grid of `‖Δ from baseline‖` magnitudes. Bright cells light up when the gripper makes contact. |
-| `frame`     | Single mid-episode frame: gripper camera image side-by-side with the tactile heatmap. Good for sanity-checking that contact in the video lines up with sensor activity. |
-| `all`       | Runs `summary`, then opens each plot in turn. |
+| `--mode`     | What it shows                                                                                                                                                           |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `summary`    | Shape / dtype / per-axis (X, Y, Z) min, max, mean, std over the episode. **No GUI required** — useful in CI or over SSH.                                                |
+| `timeseries` | Three stacked line plots (X, Y, Z) with one line per taxel over the episode. Spikes correspond to contact events.                                                       |
+| `heatmap`    | Animated 4×4 grid of `‖Δ from baseline‖` magnitudes. Bright cells light up when the gripper makes contact.                                                              |
+| `frame`      | Single mid-episode frame: gripper camera image side-by-side with the tactile heatmap. Good for sanity-checking that contact in the video lines up with sensor activity. |
+| `all`        | Runs `summary`, then opens each plot in turn.                                                                                                                           |
 
 ### Flags
 

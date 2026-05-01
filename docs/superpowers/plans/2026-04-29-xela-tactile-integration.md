@@ -12,32 +12,32 @@
 
 ## File Structure
 
-| Path | Responsibility | New/Edit |
-| --- | --- | --- |
-| `src/lerobot/tactile/__init__.py` | Public surface for the subsystem (re-exports). | New |
-| `src/lerobot/tactile/configs.py` | `TactileSensorConfig` base dataclass + `draccus.ChoiceRegistry`. | New |
-| `src/lerobot/tactile/tactile_sensor.py` | `TactileSensor` ABC. | New |
-| `src/lerobot/tactile/utils.py` | `make_tactile_sensors_from_configs(...)` factory. | New |
-| `src/lerobot/tactile/mock/__init__.py` | Re-export `MockTactileSensor`, `MockTactileConfig`. | New |
-| `src/lerobot/tactile/mock/mock_tactile.py` | `MockTactileConfig` + `MockTactileSensor` (deterministic sinusoid generator, no I/O). | New |
-| `src/lerobot/tactile/xela/__init__.py` | Re-export `XelaTactileSensor`, `XelaTactileConfig`. | New |
-| `src/lerobot/tactile/xela/configuration_xela.py` | `XelaTactileConfig` dataclass + register_subclass. | New |
-| `src/lerobot/tactile/xela/parser.py` | Pure functions for parsing XELA WebSocket frames (no I/O, fully unit-testable). | New |
-| `src/lerobot/tactile/xela/xela_tactile.py` | `XelaTactileSensor` (WebSocket reader thread, last-good-frame, reconnect). | New |
-| `src/lerobot/tactile/xela/README.md` | XELA bring-up notes. | New |
-| `src/lerobot/utils/import_utils.py` | Add `_websocket_client_available` flag. | Edit |
-| `src/lerobot/robots/bi_yam_follower/config_bi_yam_follower.py` | Add `tactile_sensors: dict[str, TactileSensorConfig] = {}` field. | Edit |
-| `src/lerobot/robots/bi_yam_follower/bi_yam_follower.py` | Wire `tactile_sensors` into `connect`/`disconnect`/`observation_features`/`get_observation`. | Edit |
-| `src/lerobot/robots/bi_yam_follower/run_xela_server.py` | Operator wrapper that launches `xela_server` with sensible defaults. | New |
-| `src/lerobot/robots/bi_yam_follower/README.md` | Add tactile bring-up section. | Edit |
-| `pyproject.toml` | Add `websocket-client>=1.7,<2.0` to `[project.optional-dependencies] yam`. | Edit |
-| `tests/tactile/__init__.py` | Empty package marker. | New |
-| `tests/tactile/test_configs.py` | Test config registry round-trip. | New |
-| `tests/tactile/test_factory.py` | Test `make_tactile_sensors_from_configs`. | New |
-| `tests/tactile/test_mock.py` | Test `MockTactileSensor`. | New |
-| `tests/tactile/test_xela_parser.py` | Golden-frame tests for parser (manual page 37 examples). | New |
-| `tests/tactile/test_xela_sensor.py` | `XelaTactileSensor` tests with mocked WebSocketApp. | New |
-| `tests/robots/test_bi_yam_tactile.py` | `BiYamFollower` × `MockTactileSensor` integration. | New |
+| Path                                                           | Responsibility                                                                               | New/Edit |
+| -------------------------------------------------------------- | -------------------------------------------------------------------------------------------- | -------- |
+| `src/lerobot/tactile/__init__.py`                              | Public surface for the subsystem (re-exports).                                               | New      |
+| `src/lerobot/tactile/configs.py`                               | `TactileSensorConfig` base dataclass + `draccus.ChoiceRegistry`.                             | New      |
+| `src/lerobot/tactile/tactile_sensor.py`                        | `TactileSensor` ABC.                                                                         | New      |
+| `src/lerobot/tactile/utils.py`                                 | `make_tactile_sensors_from_configs(...)` factory.                                            | New      |
+| `src/lerobot/tactile/mock/__init__.py`                         | Re-export `MockTactileSensor`, `MockTactileConfig`.                                          | New      |
+| `src/lerobot/tactile/mock/mock_tactile.py`                     | `MockTactileConfig` + `MockTactileSensor` (deterministic sinusoid generator, no I/O).        | New      |
+| `src/lerobot/tactile/xela/__init__.py`                         | Re-export `XelaTactileSensor`, `XelaTactileConfig`.                                          | New      |
+| `src/lerobot/tactile/xela/configuration_xela.py`               | `XelaTactileConfig` dataclass + register_subclass.                                           | New      |
+| `src/lerobot/tactile/xela/parser.py`                           | Pure functions for parsing XELA WebSocket frames (no I/O, fully unit-testable).              | New      |
+| `src/lerobot/tactile/xela/xela_tactile.py`                     | `XelaTactileSensor` (WebSocket reader thread, last-good-frame, reconnect).                   | New      |
+| `src/lerobot/tactile/xela/README.md`                           | XELA bring-up notes.                                                                         | New      |
+| `src/lerobot/utils/import_utils.py`                            | Add `_websocket_client_available` flag.                                                      | Edit     |
+| `src/lerobot/robots/bi_yam_follower/config_bi_yam_follower.py` | Add `tactile_sensors: dict[str, TactileSensorConfig] = {}` field.                            | Edit     |
+| `src/lerobot/robots/bi_yam_follower/bi_yam_follower.py`        | Wire `tactile_sensors` into `connect`/`disconnect`/`observation_features`/`get_observation`. | Edit     |
+| `src/lerobot/robots/bi_yam_follower/run_xela_server.py`        | Operator wrapper that launches `xela_server` with sensible defaults.                         | New      |
+| `src/lerobot/robots/bi_yam_follower/README.md`                 | Add tactile bring-up section.                                                                | Edit     |
+| `pyproject.toml`                                               | Add `websocket-client>=1.7,<2.0` to `[project.optional-dependencies] yam`.                   | Edit     |
+| `tests/tactile/__init__.py`                                    | Empty package marker.                                                                        | New      |
+| `tests/tactile/test_configs.py`                                | Test config registry round-trip.                                                             | New      |
+| `tests/tactile/test_factory.py`                                | Test `make_tactile_sensors_from_configs`.                                                    | New      |
+| `tests/tactile/test_mock.py`                                   | Test `MockTactileSensor`.                                                                    | New      |
+| `tests/tactile/test_xela_parser.py`                            | Golden-frame tests for parser (manual page 37 examples).                                     | New      |
+| `tests/tactile/test_xela_sensor.py`                            | `XelaTactileSensor` tests with mocked WebSocketApp.                                          | New      |
+| `tests/robots/test_bi_yam_tactile.py`                          | `BiYamFollower` × `MockTactileSensor` integration.                                           | New      |
 
 ---
 
@@ -53,6 +53,7 @@
 ### Task 1: Add `websocket-client` dependency and import-availability flag
 
 **Files:**
+
 - Modify: `pyproject.toml:172-176`
 - Modify: `src/lerobot/utils/import_utils.py:110-124`
 - Test: `tests/tactile/__init__.py`, `tests/tactile/test_imports.py`
@@ -62,6 +63,7 @@
 Create `tests/tactile/__init__.py` (empty file).
 
 Create `tests/tactile/test_imports.py`:
+
 ```python
 # Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
@@ -140,6 +142,7 @@ git commit -m "chore(tactile): add websocket-client to yam extra and import flag
 ### Task 2: `TactileSensorConfig` base class
 
 **Files:**
+
 - Create: `src/lerobot/tactile/__init__.py`
 - Create: `src/lerobot/tactile/configs.py`
 - Test: `tests/tactile/test_configs.py`
@@ -147,6 +150,7 @@ git commit -m "chore(tactile): add websocket-client to yam extra and import flag
 - [ ] **Step 1: Write the failing test**
 
 Create `tests/tactile/test_configs.py`:
+
 ```python
 # Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
@@ -291,12 +295,14 @@ git commit -m "feat(tactile): add TactileSensorConfig base with draccus ChoiceRe
 ### Task 3: `TactileSensor` ABC
 
 **Files:**
+
 - Modify: `src/lerobot/tactile/tactile_sensor.py`
 - Test: `tests/tactile/test_tactile_sensor.py`
 
 - [ ] **Step 1: Write the failing test**
 
 Create `tests/tactile/test_tactile_sensor.py`:
+
 ```python
 # Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
@@ -463,12 +469,14 @@ git commit -m "feat(tactile): add TactileSensor ABC base class"
 ### Task 4: `make_tactile_sensors_from_configs` factory
 
 **Files:**
+
 - Create: `src/lerobot/tactile/utils.py`
 - Test: `tests/tactile/test_factory.py`
 
 - [ ] **Step 1: Write the failing test (factory should accept an empty dict)**
 
 Create `tests/tactile/test_factory.py`:
+
 ```python
 # Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
@@ -582,6 +590,7 @@ git commit -m "feat(tactile): add make_tactile_sensors_from_configs factory"
 ### Task 5: `MockTactileSensor` (for CI and BiYamFollower integration tests)
 
 **Files:**
+
 - Create: `src/lerobot/tactile/mock/__init__.py`
 - Create: `src/lerobot/tactile/mock/mock_tactile.py`
 - Test: `tests/tactile/test_mock.py`
@@ -589,6 +598,7 @@ git commit -m "feat(tactile): add make_tactile_sensors_from_configs factory"
 - [ ] **Step 1: Write failing tests for `MockTactileSensor`**
 
 Create `tests/tactile/test_mock.py`:
+
 ```python
 # Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
@@ -670,6 +680,7 @@ Expected: FAIL — `ModuleNotFoundError: No module named 'lerobot.tactile.mock'`
 - [ ] **Step 3: Create the mock package init**
 
 Create `src/lerobot/tactile/mock/__init__.py`:
+
 ```python
 # Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
@@ -693,6 +704,7 @@ __all__ = ["MockTactileConfig", "MockTactileSensor"]
 - [ ] **Step 4: Implement `MockTactileSensor` and `MockTactileConfig`**
 
 Create `src/lerobot/tactile/mock/mock_tactile.py`:
+
 ```python
 # Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
@@ -800,6 +812,7 @@ git commit -m "feat(tactile): add MockTactileSensor backend for CI"
 ### Task 6: `XelaTactileConfig`
 
 **Files:**
+
 - Create: `src/lerobot/tactile/xela/__init__.py`
 - Create: `src/lerobot/tactile/xela/configuration_xela.py`
 - Test: `tests/tactile/test_xela_config.py`
@@ -807,6 +820,7 @@ git commit -m "feat(tactile): add MockTactileSensor backend for CI"
 - [ ] **Step 1: Write the failing test**
 
 Create `tests/tactile/test_xela_config.py`:
+
 ```python
 # Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
@@ -859,6 +873,7 @@ Expected: FAIL — `ModuleNotFoundError: No module named 'lerobot.tactile.xela'`
 - [ ] **Step 3: Create the xela package init**
 
 Create `src/lerobot/tactile/xela/__init__.py`:
+
 ```python
 # Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
@@ -885,6 +900,7 @@ __all__ = ["XelaTactileConfig"]
 - [ ] **Step 4: Implement `XelaTactileConfig`**
 
 Create `src/lerobot/tactile/xela/configuration_xela.py`:
+
 ```python
 # Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
@@ -961,12 +977,14 @@ git commit -m "feat(tactile): add XelaTactileConfig with model→shape registry"
 ### Task 7: XELA frame parser (pure functions, no I/O)
 
 **Files:**
+
 - Create: `src/lerobot/tactile/xela/parser.py`
 - Test: `tests/tactile/test_xela_parser.py`
 
 - [ ] **Step 1: Write failing tests against golden-frame fixtures**
 
 Create `tests/tactile/test_xela_parser.py`:
+
 ```python
 # Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
@@ -1102,6 +1120,7 @@ Expected: FAIL — `ModuleNotFoundError: No module named 'lerobot.tactile.xela.p
 - [ ] **Step 3: Implement the parser**
 
 Create `src/lerobot/tactile/xela/parser.py`:
+
 ```python
 # Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
@@ -1231,12 +1250,14 @@ git commit -m "feat(tactile): add pure XELA WebSocket frame parser"
 ### Task 8: `XelaTactileSensor` (reader thread, last-good-frame, reconnect)
 
 **Files:**
+
 - Create: `src/lerobot/tactile/xela/xela_tactile.py`
 - Test: `tests/tactile/test_xela_sensor.py`
 
 - [ ] **Step 1: Write failing tests with mocked WebSocketApp**
 
 Create `tests/tactile/test_xela_sensor.py`:
+
 ```python
 # Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
@@ -1408,6 +1429,7 @@ Expected: FAIL — `ModuleNotFoundError: No module named 'lerobot.tactile.xela.x
 - [ ] **Step 3: Implement `XelaTactileSensor`**
 
 Create `src/lerobot/tactile/xela/xela_tactile.py`:
+
 ```python
 # Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
@@ -1660,12 +1682,14 @@ git commit -m "feat(tactile): add XelaTactileSensor WebSocket client backend"
 ### Task 9: Wire `tactile_sensors` into `BiYamFollowerConfig`
 
 **Files:**
+
 - Modify: `src/lerobot/robots/bi_yam_follower/config_bi_yam_follower.py`
 - Test: `tests/robots/test_bi_yam_tactile.py`
 
 - [ ] **Step 1: Write the failing config test**
 
 Create `tests/robots/test_bi_yam_tactile.py`:
+
 ```python
 # Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
@@ -1735,12 +1759,14 @@ git commit -m "feat(bi_yam): add tactile_sensors field to BiYamFollowerConfig"
 ### Task 10: Wire tactile reads into `BiYamFollower.get_observation()`
 
 **Files:**
+
 - Modify: `src/lerobot/robots/bi_yam_follower/bi_yam_follower.py`
 - Test: `tests/robots/test_bi_yam_tactile.py` (extend)
 
 - [ ] **Step 1: Add the integration test (failing)**
 
 Append to `tests/robots/test_bi_yam_tactile.py`:
+
 ```python
 import numpy as np
 import pytest
@@ -1904,12 +1930,14 @@ git commit -m "feat(bi_yam): wire tactile_sensors into observation pipeline"
 ### Task 11: `run_xela_server.py` operator wrapper
 
 **Files:**
+
 - Create: `src/lerobot/robots/bi_yam_follower/run_xela_server.py`
 - Test: covered manually (script smoke-test only).
 
 - [ ] **Step 1: Create the wrapper script**
 
 Create `src/lerobot/robots/bi_yam_follower/run_xela_server.py`:
+
 ```python
 #!/usr/bin/env python
 # Copyright 2026 The HuggingFace Inc. team. All rights reserved.
@@ -2006,13 +2034,15 @@ git commit -m "feat(bi_yam): add run_xela_server.py operator wrapper"
 ### Task 12: Documentation
 
 **Files:**
+
 - Create: `src/lerobot/tactile/xela/README.md`
 - Modify: `src/lerobot/robots/bi_yam_follower/README.md` (append a new section)
 
 - [ ] **Step 1: Create the XELA backend README**
 
 Create `src/lerobot/tactile/xela/README.md`:
-```markdown
+
+````markdown
 # XELA Tactile Backend
 
 A WebSocket client for [XELA Robotics](https://xelarobotics.com/) tactile sensors served
@@ -2021,12 +2051,12 @@ the XELA Software Manual into a flat `(N,)` `np.float32` vector per read.
 
 ## Supported models
 
-| Model | Layout | Channels |
-| --- | --- | --- |
-| `XR1944` | 4×4 taxels × 3 axes | 48 |
-| `XR1946` | 4×6 taxels × 3 axes | 72 |
-| `XR2244` | 4×4 (magnetic-comp) × 3 axes | 48 |
-| `XR1922` | 4×4 × 3 axes | 48 |
+| Model    | Layout                       | Channels |
+| -------- | ---------------------------- | -------- |
+| `XR1944` | 4×4 taxels × 3 axes          | 48       |
+| `XR1946` | 4×6 taxels × 3 axes          | 72       |
+| `XR2244` | 4×4 (magnetic-comp) × 3 axes | 48       |
+| `XR1922` | 4×4 × 3 axes                 | 48       |
 
 Add new models in `configuration_xela.py:TAXELS_BY_MODEL`.
 
@@ -2048,6 +2078,7 @@ Per the manual (p. 37), each WebSocket message is a JSON object:
   }
 }
 ```
+````
 
 `data` is a comma-separated string of 4-character hex codes (uint16), 3 per taxel
 (X, Y, Z). The first message after connect is `{"message": "Welcome", ...}` and is
@@ -2073,14 +2104,15 @@ python -m lerobot.tactile.xela.xela_tactile --host 127.0.0.1 --port 5000 --senso
 
 ## Failure modes
 
-| Condition | Behaviour |
-| --- | --- |
-| `xela_server` not running at connect | `XelaTactileSensor.async_read()` raises `TimeoutError` after `receive_timeout_s`. |
-| WS disconnect mid-episode | Reader auto-reconnects (capped exponential backoff to 2 s); `async_read` returns last-good-frame; one warning per disconnect. |
-| Sequence regression | Frame dropped silently. |
-| Stale frame (`now − latest_timestamp > 1 s`) | Warning logged each call, data still returned. |
-| Model mismatch (xServ.ini vs config) | Frame dropped, warning logged. |
-```
+| Condition                                    | Behaviour                                                                                                                     |
+| -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `xela_server` not running at connect         | `XelaTactileSensor.async_read()` raises `TimeoutError` after `receive_timeout_s`.                                             |
+| WS disconnect mid-episode                    | Reader auto-reconnects (capped exponential backoff to 2 s); `async_read` returns last-good-frame; one warning per disconnect. |
+| Sequence regression                          | Frame dropped silently.                                                                                                       |
+| Stale frame (`now − latest_timestamp > 1 s`) | Warning logged each call, data still returned.                                                                                |
+| Model mismatch (xServ.ini vs config)         | Frame dropped, warning logged.                                                                                                |
+
+````
 
 - [ ] **Step 2: Append a tactile section to bi_yam_follower/README.md**
 
@@ -2099,7 +2131,7 @@ a local WebSocket.
 sudo slcand -o -s8 -t hw -S 3000000 /dev/ttyUSB0 slcan0
 sudo ifconfig slcan0 up
 xela_conf -d socketcan -c slcan0   # writes /etc/xela/xServ.ini if missing
-```
+````
 
 ### Per session
 
@@ -2127,8 +2159,8 @@ lerobot-record \
 
 ### Recorded keys
 
-| Key | Shape | Dtype | Notes |
-| --- | --- | --- | --- |
+| Key                                  | Shape   | Dtype     | Notes                                                                              |
+| ------------------------------------ | ------- | --------- | ---------------------------------------------------------------------------------- |
 | `observation.tactile.right_finger_r` | `(48,)` | `float32` | Raw uint16 magnetic-field readings cast losslessly to float32 (16 taxels × X/Y/Z). |
 
 To enable XCAL-calibrated forces (Newtons) alongside, add `"use_calibrated": true` to
@@ -2140,14 +2172,15 @@ the sensor config; a sibling `observation.tactile.right_finger_r.cal` key appear
 `observation.tactile.<arm>_finger_<side>` where `arm ∈ {left, right}` and
 `side ∈ {l, r}` (which jaw of the parallel gripper). Add additional entries to
 `--robot.tactile_sensors='{...}'` and the keys appear in the dataset automatically.
-```
+
+````
 
 - [ ] **Step 3: Commit**
 
 ```bash
 git add src/lerobot/tactile/xela/README.md src/lerobot/robots/bi_yam_follower/README.md
 git commit -m "docs(tactile): add XELA backend README and bi_yam tactile section"
-```
+````
 
 ---
 
@@ -2213,6 +2246,7 @@ After writing this plan, I checked it against the spec:
 **2. Placeholder scan:** No "TBD"/"TODO"/"add appropriate error handling" markers in any task. Every code step contains the actual code.
 
 **3. Type consistency:**
+
 - `TactileSensor.shape` → `tuple[int, ...]` (used identically in `MockTactileSensor`, `XelaTactileSensor`, and `BiYamFollower._tactile_ft`).
 - `TactileSensor.dtype` → `np.dtype` (consistent in both backends).
 - `TactileSensor.async_read()` → `NDArray[np.float32]` (consistent across mock + xela + integration test assertions).
@@ -2226,7 +2260,7 @@ No inconsistencies found.
 
 ## Post-implementation amendments (2026-04-30)
 
-The plan's task code blocks above represent the plan *as written* before execution. Three corrections were made during execution after smoke-testing against real XR1944 hardware revealed limitations of XELA Server v1.7.6 build 158509. The shipped code (and the `tactile` branch) reflects these corrections; the originals are kept here as historical record.
+The plan's task code blocks above represent the plan _as written_ before execution. Three corrections were made during execution after smoke-testing against real XR1944 hardware revealed limitations of XELA Server v1.7.6 build 158509. The shipped code (and the `tactile` branch) reflects these corrections; the originals are kept here as historical record.
 
 ### A. `XelaTactileConfig.host` default: `"127.0.0.1"` → `"auto"`
 
