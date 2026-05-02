@@ -45,36 +45,10 @@ uv run python examples/tactile/inspect_tactile_dataset.py \
 - `--episode <int>` — episode index (default `0`).
 - `--key <name>` — specific `observation.tactile.<name>` key when more than
   one sensor is recorded. Default = first alphabetically.
-- `--root <path>` — local dataset root override (reads directly from this
-  path instead of the Hub snapshot cache).
-
-### When to use `--root` vs the default cache
-
-By default the script reads from the revision-safe Hub snapshot cache at
-`~/.cache/huggingface/lerobot/<repo_id>`. That cache only updates when
-something explicitly fetches from the Hub — so it can lag behind your
-local writes during/after a recording session.
-
-Pass `--root <path>` whenever you've been recording into a writable local
-directory and want to inspect the freshly-written data:
-
-- **You ran `lerobot-record --resume=true --dataset.root=<path>`.** Pass
-  the same `<path>` here. The Hub cache will not see the appended
-  episodes until the resume run pushes to the Hub *and* you refresh the
-  cache (see below). See
-  [bi_yam → Resuming an existing dataset](../../src/lerobot/robots/bi_yam_follower/README.md#resuming-an-existing-dataset)
-  for the full resume workflow.
-- **Symptom of querying a stale cache:** `--episode N` raises
-  `ValueError: Instruction "train" corresponds to no data!` because the
-  HuggingFace `datasets` filter finds no rows for an episode index the
-  Hub cache doesn't know about yet.
-
-To force the default (no-`--root`) path to re-fetch the latest Hub state:
-
-```bash
-rm -rf ~/.cache/huggingface/lerobot/${HF_USER}/<dataset_name>
-# Next inspect call without --root re-pulls from the Hub.
-```
+- `--root <path>` — read directly from a local dataset root instead of
+  fetching from the Hub. Useful when the dataset isn't published yet, when
+  you want to inspect a local snapshot in place, or when you have a
+  writable working copy outside the Hub cache.
 
 ### Dependencies
 

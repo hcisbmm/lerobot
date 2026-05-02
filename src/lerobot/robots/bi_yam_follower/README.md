@@ -778,60 +778,36 @@ The recorded key is `observation.tactile.right_finger_r` with shape `(48,)`
 XCAL-calibrated forces, or inspect a recorded episode, see the dedicated
 [Tactile Sensor (XELA, optional)](#tactile-sensor-xela-optional) section.
 
-#### Resuming an existing dataset
+#### Adding more episodes to an existing dataset
 
-To append more episodes to a dataset that already exists on the Hub, pass
-`--resume=true` together with `--dataset.root=<local writable path>`.
-`LeRobotDataset.resume()` refuses to write into the default Hub snapshot
-cache (under `~/.cache/huggingface/lerobot/...`) — that cache is
-revision-safe and shared, so a recording session would corrupt it. The first
-resume call materialises the dataset from the Hub into your `--dataset.root`,
-and subsequent calls append directly to it.
-
-> **`--dataset.num_episodes` semantics in resume mode:** the value is the
-> count of episodes recorded **in this invocation** (the loop terminates
-> once that many new episodes have been captured), *not* the new total.
-> So if your dataset already has 2 episodes and you want to bring the total
-> to 6, pass `--dataset.num_episodes=4`.
+**Recommended — record into a fresh `--dataset.repo_id`** (e.g. append `-v2`,
+`-extra`, or a date suffix), then merge offline if you need a single
+combined dataset later:
 
 ```bash
-uv run lerobot-record \
-  --robot.type=bi_yam_follower \
-  --robot.tactile_sensors='{right_finger_r: {type: xela, port: 5000, sensor_id: "1", model: XR1944}}' \
-  --teleop.type=bi_yam_leader \
-  --dataset.repo_id="${HF_USER}/bimanual-yam-tactile-demo" \
-  --dataset.root="$HOME/lerobot-data/bimanual-yam-tactile-demo" \
-  --resume=true \
-  --dataset.num_episodes=4 \
-  --dataset.single_task="Pick and place with tactile feedback" \
-  --display_data=false \
-  --dataset.fps=30
+--dataset.repo_id="${HF_USER}/bimanual-yam-tactile-demo-v2"
 ```
 
-If you'd rather not deal with a writable local root, simply record into a
-fresh `--dataset.repo_id` (e.g. append `-v2`) and skip resume entirely.
+This sidesteps two known issues with the native `--resume=true` path that
+have bitten real sessions:
 
-> **Inspecting after resume — `--root` matters.** During and right after a
-> resume session, your `--dataset.root` is the source of truth — it has
-> the freshly-appended episodes. The default Hub snapshot cache
-> (`~/.cache/huggingface/lerobot/<repo>`) only updates when you re-fetch
-> from the Hub, so it can lag behind your local writes. Pass the same
-> `--root` to inspect tools while iterating:
->
-> ```bash
-> uv run python examples/tactile/inspect_tactile_dataset.py \
->   --repo-id ${HF_USER}/bimanual-yam-tactile-demo \
->   --root "$HOME/lerobot-data/bimanual-yam-tactile-demo" \
->   --episode 2
-> ```
->
-> Once the session has pushed to the Hub and you want the default
-> (no-`--root`) path to see the new episodes, refresh the cache:
->
-> ```bash
-> rm -rf ~/.cache/huggingface/lerobot/${HF_USER}/bimanual-yam-tactile-demo
-> # Next inspect call without --root will re-fetch the latest Hub state.
-> ```
+1. **Video timestamp drift in newly-encoded chunks.** When resume opens a
+   new chunk (e.g. `videos/.../file-001.mp4`), the encoder's PTS clock
+   can be skewed by ~1 frame at the chunk boundary. `LeRobotDataset`'s
+   default `tolerance_s=1e-4` is far tighter than that drift, so cold
+   random-access reads (training data loaders, the `frame` mode of
+   `inspect_tactile_dataset.py`) raise `FrameTimestampError` on
+   resumed-chunk frames.
+2. **Original episodes' data files can go missing on Hub.** During real
+   sessions we saw the resume push upload only the new chunk
+   (`data/chunk-000/file-001.parquet` + new MP4s), without preserving the
+   previous chunk's data files (`file-000.parquet` + original MP4s). The
+   metadata still claims those episodes exist, but their rows are
+   unreadable — effectively silent data loss.
+
+These bugs live in the resume + push pipeline, not in this README, so
+once they're fixed upstream the resume workflow can come back. Until
+then, fresh-repo-id is the safe path.
 
 ### Configuration Parameters
 
@@ -1142,8 +1118,8 @@ lerobot-record \
 ```
 
 For tactile combined with cameras, see [Step 3 → With Tactile Sensor (XELA, optional)](#with-tactile-sensor-xela-optional)
-above. To append more episodes to an already-published tactile dataset, see
-[Step 3 → Resuming an existing dataset](#resuming-an-existing-dataset).
+above. To add more episodes to an already-published tactile dataset, see
+[Step 3 → Adding more episodes to an existing dataset](#adding-more-episodes-to-an-existing-dataset).
 
 ### Stopping `xela_server` after the session
 
