@@ -811,6 +811,28 @@ uv run lerobot-record \
 If you'd rather not deal with a writable local root, simply record into a
 fresh `--dataset.repo_id` (e.g. append `-v2`) and skip resume entirely.
 
+> **Inspecting after resume — `--root` matters.** During and right after a
+> resume session, your `--dataset.root` is the source of truth — it has
+> the freshly-appended episodes. The default Hub snapshot cache
+> (`~/.cache/huggingface/lerobot/<repo>`) only updates when you re-fetch
+> from the Hub, so it can lag behind your local writes. Pass the same
+> `--root` to inspect tools while iterating:
+>
+> ```bash
+> uv run python examples/tactile/inspect_tactile_dataset.py \
+>   --repo-id ${HF_USER}/bimanual-yam-tactile-demo \
+>   --root "$HOME/lerobot-data/bimanual-yam-tactile-demo" \
+>   --episode 2
+> ```
+>
+> Once the session has pushed to the Hub and you want the default
+> (no-`--root`) path to see the new episodes, refresh the cache:
+>
+> ```bash
+> rm -rf ~/.cache/huggingface/lerobot/${HF_USER}/bimanual-yam-tactile-demo
+> # Next inspect call without --root will re-fetch the latest Hub state.
+> ```
+
 ### Configuration Parameters
 
 #### Robot Configuration (`bi_yam_follower`)
