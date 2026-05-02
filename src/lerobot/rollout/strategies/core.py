@@ -286,19 +286,45 @@ def send_next_action(
     features = ctx.data.dataset_features
     ordered_keys = ctx.data.ordered_action_keys
 
+    # PROBE: per-phase timing
+    import time as _time
+    _t0 = _time.perf_counter()
+    ran_inference = False
+    _t_infer_start = _t_infer_end = _t_cpu_end = _t0
+
     if interpolator.needs_new_action():
+        ran_inference = True
         obs_frame = build_dataset_frame(features, obs_processed, prefix=OBS_STR)
+        _t_infer_start = _time.perf_counter()
         action_tensor = engine.get_action(obs_frame)
+        _t_infer_end = _time.perf_counter()
         if action_tensor is not None:
             interpolator.add(action_tensor.cpu())
+        _t_cpu_end = _time.perf_counter()
 
     interp = interpolator.get()
     if interp is None:
+        send_next_action.last_timings = {  # type: ignore[attr-defined]
+            "ran_inference": ran_inference,
+            "infer_ms": (_t_infer_end - _t_infer_start) * 1e3,
+            "cpu_sync_ms": (_t_cpu_end - _t_infer_end) * 1e3,
+            "send_ms": 0.0,
+            "total_ms": (_time.perf_counter() - _t0) * 1e3,
+        }
         return None
 
     if len(interp) != len(ordered_keys):
         raise ValueError(f"Interpolated tensor length ({len(interp)}) != action keys ({len(ordered_keys)})")
     action_dict = {k: interp[i].item() for i, k in enumerate(ordered_keys)}
     processed = ctx.processors.robot_action_processor((action_dict, obs_raw))
+    _t_pre_send = _time.perf_counter()
     ctx.hardware.robot_wrapper.send_action(processed)
+    _t_end = _time.perf_counter()
+    send_next_action.last_timings = {  # type: ignore[attr-defined]
+        "ran_inference": ran_inference,
+        "infer_ms": (_t_infer_end - _t_infer_start) * 1e3,
+        "cpu_sync_ms": (_t_cpu_end - _t_infer_end) * 1e3,
+        "send_ms": (_t_end - _t_pre_send) * 1e3,
+        "total_ms": (_t_end - _t0) * 1e3,
+    }
     return action_dict

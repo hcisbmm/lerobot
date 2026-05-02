@@ -378,6 +378,7 @@ def record_loop(
 
         # Get robot observation
         obs = robot.get_observation()
+        _t_obs = time.perf_counter()  # PROBE
 
         # Strip .eff keys when effort recording is disabled
         if not record_effort:
@@ -471,11 +472,13 @@ def record_loop(
                 )
             continue
 
+        _t_action = time.perf_counter()  # PROBE
         # Send action to robot
         # Action can eventually be clipped using `max_relative_target`,
         # so action actually sent is saved in the dataset. action = postprocessor.process(action)
         # TODO(steven, pepijn, adil): we should use a pipeline step to clip the action, so the sent action is the action that we input to the robot.
         _sent_action = robot.send_action(robot_action_to_send)
+        _t_send = time.perf_counter()  # PROBE
 
         if torque_visualizer is not None:
             torque_visualizer.update(obs)
@@ -491,12 +494,20 @@ def record_loop(
                 observation=obs_processed, action=action_values, compress_images=display_compressed_images
             )
 
-        dt_s = time.perf_counter() - start_loop_t
+        _t_end = time.perf_counter()
+        dt_s = _t_end - start_loop_t
 
         sleep_time_s: float = control_interval - dt_s
         if sleep_time_s < 0:
+            _ms_obs = 1000 * (_t_obs - start_loop_t)
+            _ms_act = 1000 * (_t_action - _t_obs)
+            _ms_send = 1000 * (_t_send - _t_action)
+            _ms_frame = 1000 * (_t_end - _t_send)
             logging.warning(
-                f"Record loop is running slower ({1 / dt_s:.1f} Hz) than the target FPS ({fps} Hz). Dataset frames might be dropped and robot control might be unstable. Common causes are: 1) Camera FPS not keeping up 2) Policy inference taking too long 3) CPU starvation"
+                f"Record loop is running slower ({1 / dt_s:.1f} Hz) than the target FPS ({fps} Hz). "
+                f"PROBE ms: get_obs={_ms_obs:.1f} action={_ms_act:.1f} send={_ms_send:.1f} frame={_ms_frame:.1f} "
+                f"total={1000 * dt_s:.1f}. Dataset frames might be dropped and robot control might be unstable. "
+                f"Common causes are: 1) Camera FPS not keeping up 2) Policy inference taking too long 3) CPU starvation"
             )
 
         precise_sleep(max(sleep_time_s, 0.0))

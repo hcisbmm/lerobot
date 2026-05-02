@@ -16,7 +16,6 @@
 
 import logging
 import time
-from concurrent.futures import ThreadPoolExecutor
 from functools import cached_property
 from typing import TYPE_CHECKING, Any
 
@@ -137,13 +136,6 @@ class BiYamFollower(Robot):
         # Store number of DOFs (will be set after connection)
         self._left_dofs = None
         self._right_dofs = None
-
-        # Parallel camera-read executor. Each RealSense camera has its own
-        # background capture thread + new-frame event, so reading them
-        # sequentially in a single Python thread serializes their next-frame
-        # waits (~33 ms each at 30 FPS) into a sum. A tiny pool lets them
-        # wait concurrently so the total is bounded by max(), not sum().
-        self._cam_executor: ThreadPoolExecutor | None = None
 
     @property
     def _motors_ft(self) -> dict[str, type]:
@@ -320,10 +312,13 @@ class BiYamFollower(Robot):
         Returns:
             Dictionary with joint positions for both arms and optionally camera images
         """
+        # PROBE: temporary instrumentation to localize get_obs cost
+        _probe_t0 = time.perf_counter()
         obs_dict = {}
 
         # Get left arm observations
         left_obs = self.left_arm.get_observations()
+        _probe_t_left = time.perf_counter()
         left_joint_pos = left_obs["joint_pos"]
         left_has_gripper = "gripper_pos" in left_obs
         if left_has_gripper:
@@ -349,6 +344,7 @@ class BiYamFollower(Robot):
 
         # Get right arm observations
         right_obs = self.right_arm.get_observations()
+        _probe_t_right = time.perf_counter()
         right_joint_pos = right_obs["joint_pos"]
         right_has_gripper = "gripper_pos" in right_obs
         if right_has_gripper:
@@ -376,19 +372,47 @@ class BiYamFollower(Robot):
                 obs_dict[key] = 0.0
 
         # Get camera observations only if requested
+        _probe_cam_times: dict[str, float] = {}
+        _probe_t_pack = time.perf_counter()
         if include_cameras and self.cameras:
-            start = time.perf_counter()
+            cam_t0 = time.perf_counter()
             if self._cam_executor is not None:
                 futures = {
                     key: self._cam_executor.submit(cam.async_read) for key, cam in self.cameras.items()
                 }
                 for key, fut in futures.items():
+                    f_t0 = time.perf_counter()
                     obs_dict[key] = fut.result()
+                    _probe_cam_times[key] = (time.perf_counter() - f_t0) * 1e3
             else:
                 for cam_key, cam in self.cameras.items():
+                    f_t0 = time.perf_counter()
                     obs_dict[cam_key] = cam.async_read()
-            dt_ms = (time.perf_counter() - start) * 1e3
+                    _probe_cam_times[cam_key] = (time.perf_counter() - f_t0) * 1e3
+            dt_ms = (time.perf_counter() - cam_t0) * 1e3
             logger.debug(f"{self} read all cameras: {dt_ms:.1f}ms")
+
+        # PROBE: log breakdown on slow iterations (>40ms) so spikes are always captured
+        _probe_t_end = time.perf_counter()
+        total_ms = (_probe_t_end - _probe_t0) * 1e3
+        # Stash on instance so the rollout loop can read it for full-iter breakdown
+        self.last_obs_timings = {
+            "left_rpc_ms": (_probe_t_left - _probe_t0) * 1e3,
+            "right_rpc_ms": (_probe_t_right - _probe_t_left) * 1e3,
+            "pack_ms": (_probe_t_pack - _probe_t_right) * 1e3,
+            "cams_ms": (_probe_t_end - _probe_t_pack) * 1e3,
+            "cam_per": dict(_probe_cam_times),
+            "total_ms": total_ms,
+        }
+        if total_ms > 40.0:
+            cam_str = " ".join(f"{k}={v:.1f}" for k, v in _probe_cam_times.items())
+            logger.warning(
+                f"get_obs SLOW: left_rpc={self.last_obs_timings['left_rpc_ms']:.1f} "
+                f"right_rpc+leftpack={self.last_obs_timings['right_rpc_ms']:.1f} "
+                f"rightpack={self.last_obs_timings['pack_ms']:.1f} "
+                f"cams_total={self.last_obs_timings['cams_ms']:.1f} ({cam_str}) "
+                f"total={total_ms:.1f} ms"
+            )
 
         # Tactile reads — each backend's async_read is non-blocking (last-good-frame on outage).
         # When the sensor advertises a calibrated path, also emit the sibling .cal column.
@@ -526,10 +550,6 @@ class BiYamFollower(Robot):
 
         self.left_arm.disconnect()
         self.right_arm.disconnect()
-
-        if self._cam_executor is not None:
-            self._cam_executor.shutdown(wait=True)
-            self._cam_executor = None
 
         for cam in self.cameras.values():
             cam.disconnect()
