@@ -100,11 +100,18 @@ Save as `reset_can.sh`, make it executable with `chmod +x reset_can.sh`, and run
 
 To capture fingertip tactile readings during recording, mount an XELA XR1944
 (4×4 taxels × 3 axes) pad on the right-side fingertip of the right gripper.
-The sensor connects to the host via a **VScom USB-CAN Plus** adapter
-(`/dev/ttyUSB0`) with **two USB cables — both must be connected** (one is
-sensor-side power). The slCAN bus this exposes is independent of the 4 arm
-CAN interfaces above. The vendor software `xela_server` reads the slCAN
-stream and serves the latest reading on a local WebSocket (port 5000).
+The sensor connects to the host via a **VScom USB-CAN Plus** adapter with
+**two USB cables — both must be connected** (one is sensor-side power). The
+slCAN bus this exposes is independent of the 4 arm CAN interfaces above.
+The vendor software `xela_server` reads the slCAN stream and serves the
+latest reading on a local WebSocket (port 5000).
+
+The adapter typically enumerates at `/dev/ttyUSB0`, but if you have other
+USB-serial devices already plugged in it may end up at `/dev/ttyUSB1`,
+`/dev/ttyUSB2`, etc. See [**Find your VScom adapter's `/dev/ttyUSB*` path**](../../tactile/xela/README.md#find-your-vscom-adapters-devttyusb-path)
+in the XELA backend README for the diff-based and `dmesg`-based discovery
+recipes; substitute the path you find into every `slcand …` and
+`xela_conf …` command below.
 
 For the one-time vendor software install (apt `can-utils`, `/etc/xela`
 directory + 777 perms, unpack `appimage.zip`, `PATH` setup, interactive
@@ -1086,7 +1093,10 @@ a local WebSocket.
 > commands below assume those one-time steps are already done.
 
 Each boot, bring slCAN up and (re)write `xServ.ini` if it doesn't already
-match your hardware:
+match your hardware. If the VScom adapter enumerated at a path other than
+`/dev/ttyUSB0` this boot, swap it into the `slcand` line below — see
+[Find your VScom adapter's `/dev/ttyUSB*` path](../../tactile/xela/README.md#find-your-vscom-adapters-devttyusb-path)
+in the XELA backend README for the discovery recipes.
 
 ```bash
 sudo slcand -o -s8 -t hw -S 3000000 /dev/ttyUSB0 slcan0

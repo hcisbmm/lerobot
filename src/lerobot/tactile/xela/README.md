@@ -51,6 +51,47 @@ be connected** to the host. The second cable is sensor-side power, not data,
 and the converter will fail silently if it's missing (vendor manual §"Common
 errors", row "Message not sent: Transmit operation timed out").
 
+### Find your VScom adapter's `/dev/ttyUSB*` path
+
+The slCAN bring-up command (`sudo slcand … /dev/ttyUSB0 slcan0`) hard-codes
+`/dev/ttyUSB0`, but Linux assigns USB-serial numbers in the order devices
+are plugged in. If you have any other USB-serial device on the host (a
+microcontroller, GPS, or another arm's CAN-USB adapter) the VScom may end
+up as `/dev/ttyUSB1`, `/dev/ttyUSB2`, etc.
+
+**Diff-based discovery** (vendor-recommended, no special tools):
+
+```bash
+# (1) Before plugging in the VScom adapter, list current ttyUSB devices.
+ls /dev/ttyUSB*
+# (Output may be "ls: cannot access '/dev/ttyUSB*': No such file or directory"
+#  if you have nothing else plugged in — that's fine.)
+
+# (2) Plug in the VScom USB-CAN Plus. Confirm BOTH USB cables are connected.
+
+# (3) Run the listing again. The newly-appeared entry is your adapter.
+ls /dev/ttyUSB*
+```
+
+**Or watch the kernel log** as the adapter is hotplugged (works even if you
+forgot to take the "before" snapshot):
+
+```bash
+# Plug the adapter, then immediately:
+dmesg | grep -E 'tty(USB|ACM)' | tail -5
+# Expected last line is something like:
+# usb 1-X.Y: ch341-uart converter now attached to ttyUSB0
+```
+
+If your adapter ends up at a path other than `/dev/ttyUSB0`, substitute it
+into every `slcand …` and `xela_conf …` command below.
+
+> **Pinning the path across reboots (optional).** A `udev` rule keyed on the
+> adapter's USB serial / vendor:product IDs can map it to a stable symlink
+> like `/dev/xela-ttyUSB`. This is out of scope here, but `lsusb -v` shows
+> the IDs you'd need; the [Arch Linux wiki on udev](https://wiki.archlinux.org/title/Udev)
+> has a recipe.
+
 ### Install `can-utils`
 
 `slcand` (used to bring the slCAN interface up at boot) ships in `can-utils`,
