@@ -16,6 +16,7 @@
 
 import logging
 import time
+from concurrent.futures import ThreadPoolExecutor
 from functools import cached_property
 from typing import TYPE_CHECKING, Any
 
@@ -136,6 +137,13 @@ class BiYamFollower(Robot):
         # Store number of DOFs (will be set after connection)
         self._left_dofs = None
         self._right_dofs = None
+
+        # Parallel camera-read executor. Each RealSense camera has its own
+        # background capture thread + new-frame event, so reading them
+        # sequentially in a single Python thread serializes their next-frame
+        # waits (~33 ms each at 30 FPS) into a sum. A tiny pool lets them
+        # wait concurrently so the total is bounded by max(), not sum().
+        self._cam_executor: ThreadPoolExecutor | None = None
 
     @property
     def _motors_ft(self) -> dict[str, type]:
@@ -550,6 +558,10 @@ class BiYamFollower(Robot):
 
         self.left_arm.disconnect()
         self.right_arm.disconnect()
+
+        if self._cam_executor is not None:
+            self._cam_executor.shutdown(wait=True)
+            self._cam_executor = None
 
         for cam in self.cameras.values():
             cam.disconnect()
