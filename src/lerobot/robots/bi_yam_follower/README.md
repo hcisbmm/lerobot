@@ -778,6 +778,39 @@ The recorded key is `observation.tactile.right_finger_r` with shape `(48,)`
 XCAL-calibrated forces, or inspect a recorded episode, see the dedicated
 [Tactile Sensor (XELA, optional)](#tactile-sensor-xela-optional) section.
 
+#### Resuming an existing dataset
+
+To append more episodes to a dataset that already exists on the Hub, pass
+`--resume=true` together with `--dataset.root=<local writable path>`.
+`LeRobotDataset.resume()` refuses to write into the default Hub snapshot
+cache (under `~/.cache/huggingface/lerobot/...`) — that cache is
+revision-safe and shared, so a recording session would corrupt it. The first
+resume call materialises the dataset from the Hub into your `--dataset.root`,
+and subsequent calls append directly to it.
+
+> **`--dataset.num_episodes` semantics in resume mode:** the value is the
+> count of episodes recorded **in this invocation** (the loop terminates
+> once that many new episodes have been captured), *not* the new total.
+> So if your dataset already has 2 episodes and you want to bring the total
+> to 6, pass `--dataset.num_episodes=4`.
+
+```bash
+uv run lerobot-record \
+  --robot.type=bi_yam_follower \
+  --robot.tactile_sensors='{right_finger_r: {type: xela, port: 5000, sensor_id: "1", model: XR1944}}' \
+  --teleop.type=bi_yam_leader \
+  --dataset.repo_id="${HF_USER}/bimanual-yam-tactile-demo" \
+  --dataset.root="$HOME/lerobot-data/bimanual-yam-tactile-demo" \
+  --resume=true \
+  --dataset.num_episodes=4 \
+  --dataset.single_task="Pick and place with tactile feedback" \
+  --display_data=false \
+  --dataset.fps=30
+```
+
+If you'd rather not deal with a writable local root, simply record into a
+fresh `--dataset.repo_id` (e.g. append `-v2`) and skip resume entirely.
+
 ### Configuration Parameters
 
 #### Robot Configuration (`bi_yam_follower`)
@@ -1087,7 +1120,8 @@ lerobot-record \
 ```
 
 For tactile combined with cameras, see [Step 3 → With Tactile Sensor (XELA, optional)](#with-tactile-sensor-xela-optional)
-above.
+above. To append more episodes to an already-published tactile dataset, see
+[Step 3 → Resuming an existing dataset](#resuming-an-existing-dataset).
 
 ### Stopping `xela_server` after the session
 
