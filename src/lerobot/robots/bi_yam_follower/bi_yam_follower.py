@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 
 from lerobot.cameras.utils import make_cameras_from_configs
+from lerobot.tactile.utils import make_tactile_sensors_from_configs
 from lerobot.utils.decorators import check_if_not_connected
 from lerobot.utils.import_utils import _portal_available
 
@@ -130,6 +131,9 @@ class BiYamFollower(Robot):
         # Initialize cameras
         self.cameras = make_cameras_from_configs(config.cameras)
 
+        # Initialize tactile sensors (XELA, mock, ...). Connection happens in connect().
+        self.tactile_sensors = make_tactile_sensors_from_configs(config.tactile_sensors)
+
         # Store number of DOFs (will be set after connection)
         self._left_dofs = None
         self._right_dofs = None
@@ -203,10 +207,25 @@ class BiYamFollower(Robot):
             cam: (self.config.cameras[cam].height, self.config.cameras[cam].width, 3) for cam in self.cameras
         }
 
+    @property
+    def _tactile_ft(self) -> dict[str, tuple]:
+        """Tactile observation feature shapes.
+
+        Keyed as ``observation.tactile.<name>`` for the raw vector. Sensors that
+        opt into a calibrated path (``provides_calibrated=True``) also emit a
+        sibling ``observation.tactile.<name>.cal`` column of the same shape.
+        """
+        features: dict[str, tuple] = {}
+        for name, s in self.tactile_sensors.items():
+            features[f"observation.tactile.{name}"] = s.shape
+            if s.provides_calibrated:
+                features[f"observation.tactile.{name}.cal"] = s.shape
+        return features
+
     @cached_property
     def observation_features(self) -> dict[str, type | tuple]:
-        """Return observation features including motors, effort/torque, and cameras."""
-        return {**self._motors_ft, **self._effort_ft, **self._cameras_ft}
+        """Return observation features including motors, effort/torque, cameras, and tactile."""
+        return {**self._motors_ft, **self._effort_ft, **self._cameras_ft, **self._tactile_ft}
 
     @cached_property
     def action_features(self) -> dict[str, type]:
@@ -215,11 +234,12 @@ class BiYamFollower(Robot):
 
     @property
     def is_connected(self) -> bool:
-        """Check if both arms and all cameras are connected."""
+        """Check if both arms, all cameras, and all tactile sensors are connected."""
         return (
             self.left_arm.is_connected
             and self.right_arm.is_connected
             and all(cam.is_connected for cam in self.cameras.values())
+            and all(s.is_connected for s in self.tactile_sensors.values())
         )
 
     def connect(self, calibrate: bool = True) -> None:
@@ -263,6 +283,11 @@ class BiYamFollower(Robot):
                 max_workers=len(self.cameras),
                 thread_name_prefix=f"{self.name}-cam",
             )
+
+        # Connect tactile sensors. Each backend manages its own background reader thread.
+        for name, sensor in self.tactile_sensors.items():
+            logger.info("Connecting tactile sensor %r", name)
+            sensor.connect()
 
         logger.info("Successfully connected to bimanual Yam follower robot")
 
@@ -355,8 +380,7 @@ class BiYamFollower(Robot):
             start = time.perf_counter()
             if self._cam_executor is not None:
                 futures = {
-                    key: self._cam_executor.submit(cam.async_read)
-                    for key, cam in self.cameras.items()
+                    key: self._cam_executor.submit(cam.async_read) for key, cam in self.cameras.items()
                 }
                 for key, fut in futures.items():
                     obs_dict[key] = fut.result()
@@ -365,6 +389,13 @@ class BiYamFollower(Robot):
                     obs_dict[cam_key] = cam.async_read()
             dt_ms = (time.perf_counter() - start) * 1e3
             logger.debug(f"{self} read all cameras: {dt_ms:.1f}ms")
+
+        # Tactile reads — each backend's async_read is non-blocking (last-good-frame on outage).
+        # When the sensor advertises a calibrated path, also emit the sibling .cal column.
+        for name, sensor in self.tactile_sensors.items():
+            obs_dict[f"observation.tactile.{name}"] = sensor.async_read()
+            if sensor.provides_calibrated:
+                obs_dict[f"observation.tactile.{name}.cal"] = sensor.async_read_calibrated()
 
         return obs_dict
 
@@ -502,5 +533,8 @@ class BiYamFollower(Robot):
 
         for cam in self.cameras.values():
             cam.disconnect()
+
+        for sensor in self.tactile_sensors.values():
+            sensor.disconnect()
 
         logger.info("Disconnected from bimanual Yam follower robot")

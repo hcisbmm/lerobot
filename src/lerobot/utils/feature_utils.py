@@ -21,6 +21,7 @@ in the codebase – including modules that are part of the *minimal* install –
 without triggering the ``lerobot.datasets`` package guard.
 """
 
+import logging
 from typing import Any
 
 import numpy as np
@@ -69,7 +70,26 @@ def hw_to_dataset_features(
         for key, ftype in hw_features.items()
         if ftype is float or (isinstance(ftype, PolicyFeature) and ftype.type != FeatureType.VISUAL)
     }
-    cam_fts = {key: shape for key, shape in hw_features.items() if isinstance(shape, tuple)}
+    cam_fts = {
+        key: shape for key, shape in hw_features.items() if isinstance(shape, tuple) and len(shape) == 3
+    }
+    vec_fts = {
+        key: shape for key, shape in hw_features.items() if isinstance(shape, tuple) and len(shape) == 1
+    }
+    # Detect tuple shapes that match neither bucket — silently dropping them
+    # would let a future contributor add e.g. a (rows, cols, axes) numeric
+    # tensor that simply vanishes from the dataset with no error.
+    unsupported_shape_keys = [
+        key for key, shape in hw_features.items() if isinstance(shape, tuple) and len(shape) not in (1, 3)
+    ]
+    if unsupported_shape_keys:
+        logging.getLogger(__name__).warning(
+            "hw_to_dataset_features: dropping features with unsupported tuple "
+            "shapes (only 1-tuple → vector and 3-tuple → image are routed): %s. "
+            "If you need a multi-dim numeric tensor feature, extend feature_utils "
+            "with a new bucket; do not silently rely on this dispatch.",
+            {key: hw_features[key] for key in unsupported_shape_keys},
+        )
 
     if joint_fts and prefix == ACTION:
         features[prefix] = {
@@ -90,6 +110,15 @@ def hw_to_dataset_features(
             "dtype": "video" if use_video else "image",
             "shape": shape,
             "names": ["height", "width", "channels"],
+        }
+
+    # 1D non-image tuples (e.g., tactile arrays) are pre-packed vectors with
+    # their own key — emitted unchanged so the original obs key in values[] matches.
+    for key, shape in vec_fts.items():
+        features[key] = {
+            "dtype": "float32",
+            "shape": shape,
+            "names": [str(i) for i in range(int(shape[0]))],
         }
 
     _validate_feature_names(features)
@@ -118,7 +147,12 @@ def build_dataset_frame(
         if key in DEFAULT_FEATURES or not key.startswith(prefix):
             continue
         elif ft["dtype"] == "float32" and len(ft["shape"]) == 1:
-            frame[key] = np.array([values[name] for name in ft["names"]], dtype=np.float32)
+            # Pre-packed 1D arrays (e.g., tactile) live in values under the full key;
+            # bundled state vectors (observation.state) are gathered from named scalars.
+            if key in values:
+                frame[key] = np.asarray(values[key], dtype=np.float32)
+            else:
+                frame[key] = np.array([values[name] for name in ft["names"]], dtype=np.float32)
         elif ft["dtype"] in ["image", "video"]:
             frame[key] = values[key.removeprefix(f"{prefix}.images.")]
 

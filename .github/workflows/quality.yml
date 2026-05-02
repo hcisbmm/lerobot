@@ -46,6 +46,9 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
         with:
           persist-credentials: false
+          # fetch-depth: 0 → full history; required so pre-commit's
+          # --from-ref/--to-ref mode below can compute the PR diff.
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6
@@ -55,4 +58,11 @@ jobs:
       - name: Run pre-commit hooks
         uses: pre-commit/action@2c7b3805fd2a0fd8c1884dcaebf91fc102a13ecd  # v3.0.1
         with:
-          extra_args: --all-files --show-diff-on-failure --color=always
+          # On pull_request: lint only files changed in the PR diff. Avoids
+          # re-flagging pre-existing main-branch debt on every PR (which has
+          # zero signal about the PR's own code quality).
+          # On push to main: keep --all-files so main's quality bar stays
+          # unchanged and any debt on main is still flagged on direct pushes.
+          extra_args: >-
+            ${{ github.event_name == 'pull_request' && format('--from-ref {0} --to-ref {1}', github.event.pull_request.base.sha, github.event.pull_request.head.sha) || '--all-files' }}
+            --show-diff-on-failure --color=always

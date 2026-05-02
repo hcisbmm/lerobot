@@ -115,6 +115,7 @@ _feetech_sdk_available = is_package_available("feetech-servo-sdk", import_name="
 _reachy2_sdk_available = is_package_available("reachy2_sdk")
 _can_available = is_package_available("python-can", "can")
 _portal_available = is_package_available("portal")
+_websocket_client_available = is_package_available("websocket-client", import_name="websocket")
 _unitree_sdk_available = is_package_available("unitree-sdk2py", "unitree_sdk2py")
 _pyrealsense2_available = is_package_available("pyrealsense2") or is_package_available(
     "pyrealsense2-macosx", import_name="pyrealsense2"
