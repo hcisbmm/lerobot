@@ -52,11 +52,18 @@ from lerobot.cameras.realsense import RealSenseCameraConfig  # noqa: F401
 from lerobot.robots import (  # noqa: F401
     Robot,
     RobotConfig,
+    bi_openarm_follower,
     bi_so_follower,
+    bi_yam_follower,
+    earthrover_mini_plus,
+    hope_jr,
     koch_follower,
     make_robot_from_config,
     omx_follower,
+    openarm_follower,
+    reachy2,
     so_follower,
+    unitree_g1,
 )
 from lerobot.transport import (
     services_pb2,  # type: ignore
@@ -95,7 +102,19 @@ class RobotClient:
         self.robot = make_robot_from_config(config.robot)
         self.robot.connect()
 
-        lerobot_features = map_robot_keys_to_lerobot_features(self.robot)
+        # Filter effort/torque features that are exposed by some robots (e.g.
+        # bimanual yam) but not part of the policy's state input. The sync
+        # rollout path does this via RobotWrapper(_record_effort=False);
+        # replicate that here so the dim of `observation.state` matches the
+        # trained policy's expected input.
+        from lerobot.utils.feature_utils import hw_to_dataset_features
+        from lerobot.utils.constants import OBS_STR
+        filtered_obs_features = {
+            k: v for k, v in self.robot.observation_features.items() if not k.endswith(".eff")
+        }
+        lerobot_features = hw_to_dataset_features(filtered_obs_features, OBS_STR, use_video=False)
+        # Also filter at observation read time (see RobotClient.control_loop_observation).
+        self._strip_effort_keys = True
 
         # Use environment variable if server_address is not provided in config
         self.server_address = config.server_address
@@ -411,6 +430,8 @@ class RobotClient:
             start_time = time.perf_counter()
 
             raw_observation: RawObservation = self.robot.get_observation()
+            if getattr(self, "_strip_effort_keys", False):
+                raw_observation = {k: v for k, v in raw_observation.items() if not k.endswith(".eff")}
             raw_observation["task"] = task
 
             with self.latest_action_lock:
