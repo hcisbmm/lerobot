@@ -623,7 +623,11 @@ class DAggerStrategy(RolloutStrategy):
                         self._background_push(dataset, cfg)
 
                     phase = events.phase
+                    _t_obs_start = time.perf_counter()
                     obs = robot.get_observation()
+                    _obs_ms = (time.perf_counter() - _t_obs_start) * 1e3
+                    _proc_ms = 0.0
+                    _send_timings: dict | None = None
 
                     # --- CORRECTING: human teleop control + recording ---
                     # TODO(Steven): teleop runs at the same FPS as the policy. To
@@ -658,12 +662,15 @@ class DAggerStrategy(RolloutStrategy):
 
                     # --- AUTONOMOUS: policy control (no recording) ---
                     else:
+                        _t_proc_start = time.perf_counter()
                         obs_processed = self._process_observation_and_notify(ctx.processors, obs)
+                        _proc_ms = (time.perf_counter() - _t_proc_start) * 1e3
 
                         if self._handle_warmup(cfg.use_torch_compile, loop_start, control_interval):
                             continue
 
                         action_dict = send_next_action(obs_processed, obs, ctx, interpolator)
+                        _send_timings = getattr(send_next_action, "last_timings", None)
                         if action_dict is not None:
                             self._log_telemetry(obs_processed, action_dict, ctx.runtime)
                             last_action = ctx.processors.robot_action_processor((action_dict, obs))
@@ -672,8 +679,16 @@ class DAggerStrategy(RolloutStrategy):
                     if (sleep_t := control_interval - dt) > 0:
                         precise_sleep(sleep_t)
                     else:
+                        breakdown = f"obs={_obs_ms:.1f}ms proc={_proc_ms:.1f}ms"
+                        if _send_timings is not None:
+                            breakdown += (
+                                f" infer={_send_timings['infer_ms']:.1f}ms"
+                                f" cpu_sync={_send_timings['cpu_sync_ms']:.1f}ms"
+                                f" send={_send_timings['send_ms']:.1f}ms"
+                                f" ran_inference={_send_timings['ran_inference']}"
+                            )
                         logger.warning(
-                            f"Record loop is running slower ({1 / dt:.1f} Hz) than the target FPS ({cfg.fps} Hz). Dataset frames might be dropped and robot control might be unstable. Common causes are: 1) Camera FPS not keeping up 2) Policy inference taking too long 3) CPU starvation"
+                            f"Record loop is running slower ({1 / dt:.1f} Hz) than the target FPS ({cfg.fps} Hz). [{breakdown}] Dataset frames might be dropped and robot control might be unstable. Common causes are: 1) Camera FPS not keeping up 2) Policy inference taking too long 3) CPU starvation"
                         )
 
             finally:
