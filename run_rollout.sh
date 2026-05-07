@@ -19,4 +19,8 @@ uv run lerobot-rollout \
     --duration=999 \
     --display_data=true \
     --use_torch_compile=true \
-    --policy.temporal_ensemble_coeff=null
+    --policy.n_action_steps=10
+    # ── Alternative for completely smooth motion (slower loop ~13 Hz):
+    #   --policy.temporal_ensemble_coeff=0.01 \
+    #   --policy.n_action_steps=1
+    # See commit message for context: chunk-boundary discontinuity diagnosis.

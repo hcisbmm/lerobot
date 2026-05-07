@@ -179,7 +179,7 @@ def build_rollout_context(
     policy_class = get_policy_class(policy_config.type)
 
     full_config = PreTrainedConfig.from_pretrained(cfg.policy.pretrained_path)
-    for attr in ("device", "use_amp"):
+    for attr in ("device", "use_amp", "n_action_steps", "temporal_ensemble_coeff"):
         if hasattr(cfg.policy, attr) and hasattr(full_config, attr):
             cli_val = getattr(cfg.policy, attr)
             if cli_val is not None:
