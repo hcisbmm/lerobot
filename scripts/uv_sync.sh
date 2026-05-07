@@ -1,0 +1,1 @@
+uv sync --extra yam --extra dataset --extra viz --extra xvla --extra hardware

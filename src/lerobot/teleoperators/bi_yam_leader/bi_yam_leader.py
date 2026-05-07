@@ -424,6 +424,23 @@ class BiYamLeader(Teleoperator):
             except Exception as e:
                 logger.warning(f"Failed to enable bilateral control: {e}")
 
+    def enable_torque(self) -> None:
+        """Put the leader into position-tracking mode (follows ``send_feedback`` goals).
+
+        Adapter for the standard teleoperator interface used by the rollout strategies
+        (e.g. DAgger smooth handover). Maps to ``set_teleop_mode(enabled=False)`` with
+        the configured ``bilateral_kp``.
+        """
+        self.set_teleop_mode(enabled=False, bilateral_kp=self.bilateral_kp)
+
+    def disable_torque(self) -> None:
+        """Put the leader into free-movement mode (gravity compensation only).
+
+        Adapter for the standard teleoperator interface. Maps to
+        ``set_teleop_mode(enabled=True)`` (kp=0).
+        """
+        self.set_teleop_mode(enabled=True)
+
     def disconnect(self) -> None:
         """Disconnect from both leader arms."""
         logger.info("Disconnecting from bimanual Yam leader arms")
