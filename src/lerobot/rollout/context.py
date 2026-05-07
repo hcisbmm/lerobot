@@ -221,7 +221,6 @@ def build_rollout_context(
                 compile_kwargs = {
                     "backend": cfg.torch_compile_backend,
                     "mode": cfg.torch_compile_mode,
-                    "options": {"triton.cudagraphs": False},
                 }
                 policy.predict_action_chunk = torch.compile(policy.predict_action_chunk, **compile_kwargs)
                 logger.info("torch.compile applied to predict_action_chunk")
